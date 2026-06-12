@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98];
+  }
+  .btn-primary   { @apply btn bg-brand-600 text-white hover:bg-brand-700; }
+  .btn-secondary { @apply btn bg-white text-gray-700 border border-gray-200 hover:bg-gray-50; }
+  .btn-danger    { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .btn-ghost     { @apply btn text-gray-600 hover:bg-gray-100; }
+
+  .card  { @apply bg-white rounded-2xl border border-gray-100 shadow-sm; }
+  .input { @apply w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all; }
+  .label { @apply block text-sm font-medium text-gray-700 mb-1.5; }
+
+  /* Status badges */
+  .badge            { @apply inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium; }
+  .badge-active     { @apply badge bg-blue-50 text-blue-700; }
+  .badge-completed  { @apply badge bg-green-50 text-green-700; }
+  .badge-cancelled  { @apply badge bg-gray-100 text-gray-600; }
+  .badge-replacement{ @apply badge bg-amber-50 text-amber-700; }
+
+  /* Milestone status badges */
+  .badge-locked     { @apply badge bg-gray-100 text-gray-500; }
+  .badge-pending    { @apply badge bg-sky-50 text-sky-700; }
+  .badge-submitted  { @apply badge bg-amber-50 text-amber-700; }
+  .badge-confirmed  { @apply badge bg-green-50 text-green-700; }
+  .badge-disputed   { @apply badge bg-red-50 text-red-700; }
+  .badge-resolved   { @apply badge bg-purple-50 text-purple-700; }
+
+  /* Role badge */
+  .badge-company   { @apply badge bg-blue-50 text-blue-700; }
+  .badge-recruiter { @apply badge bg-brand-50 text-brand-700; }
+  .badge-arbiter   { @apply badge bg-purple-50 text-purple-700; }
+
+  /* Retention timer pill */
+  .timer-pill {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg;
+  }
+  .timer-active  { @apply timer-pill bg-amber-50 text-amber-700; }
+  .timer-ready   { @apply timer-pill bg-green-50 text-green-700; }
+  .timer-done    { @apply timer-pill bg-gray-100 text-gray-500; }
+}
