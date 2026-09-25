@@ -1,15 +1,99 @@
 'use client';
-import { Copy } from 'lucide-react';
-import { shortAddress, copyToClipboard, formatDate } from '@/lib/utils';
+
+import { useState } from 'react';
+import { Copy, Check, ExternalLink } from 'lucide-react';
+import {
+  shortAddress,
+  copyToClipboard,
+  formatDate,
+  explorerTxUrl,
+  explorerAccountUrl,
+} from '@/lib/utils';
 import type { Engagement } from '@/types';
 
+// ── Small reusable pieces ──────────────────────────────────────────────────────
+
+/** Copy-to-clipboard button with a brief checkmark feedback tick. */
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await copyToClipboard(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy to clipboard"
+      aria-label="Copy to clipboard"
+      className="text-gray-300 hover:text-gray-600 flex-shrink-0 transition-colors"
+    >
+      {copied
+        ? <Check className="w-3 h-3 text-green-500" />
+        : <Copy className="w-3 h-3" />}
+    </button>
+  );
+}
+
+/** Shortened address with copy button and explorer link. */
+function AddressCell({ value }: { value: string }) {
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="font-mono text-gray-700 truncate">{shortAddress(value, 6)}</span>
+      <CopyButton value={value} />
+      <a
+        href={explorerAccountUrl(value)}
+        target="_blank"
+        rel="noreferrer"
+        title="View on stellar.expert"
+        aria-label="View on stellar.expert"
+        className="text-gray-300 hover:text-brand-600 flex-shrink-0 transition-colors"
+      >
+        <ExternalLink className="w-3 h-3" />
+      </a>
+    </div>
+  );
+}
+
+/** Shortened tx hash with copy button and explorer link. */
+function TxCell({ value }: { value: string }) {
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="font-mono text-gray-700 truncate">{shortAddress(value, 6)}</span>
+      <CopyButton value={value} />
+      <a
+        href={explorerTxUrl(value)}
+        target="_blank"
+        rel="noreferrer"
+        title="View transaction on stellar.expert"
+        aria-label="View transaction on stellar.expert"
+        className="text-gray-300 hover:text-brand-600 flex-shrink-0 transition-colors"
+      >
+        <ExternalLink className="w-3 h-3" />
+      </a>
+    </div>
+  );
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
+type Row =
+  | { label: string; kind: 'address'; value: string }
+  | { label: string; kind: 'tx';      value: string }
+  | { label: string; kind: 'text';    value: string | null };
+
 export function EngagementMeta({ engagement: e }: { engagement: Engagement }) {
-  const addressRows = [
-    { label: 'Company',    value: e.companyAddress },
-    { label: 'Recruiter',  value: e.recruiterAddress },
-    { label: 'Arbiter',    value: e.arbiterAddress },
-    { label: 'USDC contract', value: e.tokenAddress },
-    { label: 'Creation tx',  value: e.txHash },
+  const rows: Row[] = [
+    { label: 'Created',       kind: 'text',    value: formatDate(e.createdAt) },
+    { label: 'Company',       kind: 'address', value: e.companyAddress },
+    { label: 'Recruiter',     kind: 'address', value: e.recruiterAddress },
+    { label: 'Arbiter',       kind: 'address', value: e.arbiterAddress },
+    { label: 'USDC contract', kind: 'address', value: e.tokenAddress },
+    ...(e.txHash
+      ? [{ label: 'Creation tx', kind: 'tx' as const, value: e.txHash }]
+      : []),
   ];
 
   return (
@@ -40,24 +124,18 @@ export function EngagementMeta({ engagement: e }: { engagement: Engagement }) {
         </div>
       )}
 
-      {/* On-chain addresses */}
+      {/* On-chain rows */}
       <div className="space-y-2.5">
-        {[
-          { label: 'Created', value: null, display: formatDate(e.createdAt) },
-          ...addressRows,
-        ].map(({ label, value, display }) => (
+        {rows.map(({ label, kind, value }) => (
           <div key={label} className="flex items-center justify-between text-xs">
             <span className="text-gray-400 w-32 flex-shrink-0">{label}</span>
-            {value ? (
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-mono text-gray-700 truncate">{shortAddress(value, 6)}</span>
-                <button onClick={() => copyToClipboard(value)}
-                  className="text-gray-300 hover:text-gray-600 flex-shrink-0">
-                  <Copy className="w-3 h-3" />
-                </button>
-              </div>
+
+            {kind === 'address' && value ? (
+              <AddressCell value={value} />
+            ) : kind === 'tx' && value ? (
+              <TxCell value={value} />
             ) : (
-              <span className="text-gray-700">{display ?? '—'}</span>
+              <span className="text-gray-700">{value ?? '—'}</span>
             )}
           </div>
         ))}
