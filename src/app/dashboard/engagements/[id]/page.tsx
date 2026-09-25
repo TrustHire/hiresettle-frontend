@@ -10,6 +10,7 @@ import { MilestoneTimeline } from '@/components/milestones/MilestoneTimeline';
 import { EngagementMeta } from '@/components/engagements/EngagementMeta';
 import { EngagementProgress } from '@/components/engagements/EngagementProgress';
 import { ReplacementBanner } from '@/components/engagements/ReplacementBanner';
+import { ChainEventFeed } from '@/components/engagements/ChainEventFeed';
 import {
   engagementStatusBadge, engagementStatusLabel, timeAgo,
 } from '@/lib/utils';
@@ -122,6 +123,13 @@ export default function EngagementDetailPage() {
       <div className="mt-5">
         <EngagementMeta engagement={engagement} />
       </div>
+
+      {/* On-chain activity feed */}
+      {engagement.events && engagement.events.length > 0 && (
+        <div className="mt-5">
+          <ChainEventFeed events={engagement.events} />
+        </div>
+      )}
     </div>
   );
 }
