@@ -27,7 +27,7 @@ interface Props {
 export function MilestoneTimeline({ engagement, userRole, onUpdate }: Props) {
   return (
     <div className="card divide-y divide-gray-50">
-      {engagement.milestones.map((milestone, i) => (
+      {engagement.milestones.map((milestone) => (
         <MilestoneRow
           key={milestone.id}
           milestone={milestone}
@@ -49,12 +49,11 @@ function MilestoneRow({
   onUpdate: () => void;
 }) {
   const { address } = useAuthStore();
-  const [loading, setLoading]             = useState(false);
-  const [proofInput, setProofInput]       = useState('');
+  const [loading, setLoading]               = useState(false);
+  const [proofInput, setProofInput]         = useState('');
   const [showProofInput, setShowProofInput] = useState(false);
-  const [timer, setTimer]                 = useState<RetentionTimer | null>(null);
+  const [timer, setTimer]                   = useState<RetentionTimer | null>(null);
 
-  // Fetch retention timer for Locked milestones
   useEffect(() => {
     if (milestone.kind === 'Retention' && milestone.status === 'Locked') {
       milestonesApi.getTimer(engagement.id, milestone.milestoneIndex)
@@ -66,21 +65,21 @@ function MilestoneRow({
   const isActive = engagement.status === 'Active' || engagement.status === 'ReplacementRequested';
 
   const statusIcon: Record<MilestoneStatus, JSX.Element> = {
-    Locked:        <Lock className="w-4 h-4 text-gray-400" />,
-    Pending:       <Clock className="w-4 h-4 text-sky-500" />,
-    ProofSubmitted:<Upload className="w-4 h-4 text-amber-500" />,
-    Confirmed:     <CheckCircle2 className="w-4 h-4 text-green-500" />,
-    Disputed:      <AlertTriangle className="w-4 h-4 text-red-500" />,
-    Resolved:      <CheckCircle2 className="w-4 h-4 text-purple-500" />,
+    Locked:         <Lock className="w-4 h-4 text-gray-400" />,
+    Pending:        <Clock className="w-4 h-4 text-sky-500" />,
+    ProofSubmitted: <Upload className="w-4 h-4 text-amber-500" />,
+    Confirmed:      <CheckCircle2 className="w-4 h-4 text-green-500" />,
+    Disputed:       <AlertTriangle className="w-4 h-4 text-red-500" />,
+    Resolved:       <CheckCircle2 className="w-4 h-4 text-purple-500" />,
   };
 
   const iconBg: Record<MilestoneStatus, string> = {
-    Locked:        'bg-gray-50',
-    Pending:       'bg-sky-50',
-    ProofSubmitted:'bg-amber-50',
-    Confirmed:     'bg-green-50',
-    Disputed:      'bg-red-50',
-    Resolved:      'bg-purple-50',
+    Locked:         'bg-gray-50',
+    Pending:        'bg-sky-50',
+    ProofSubmitted: 'bg-amber-50',
+    Confirmed:      'bg-green-50',
+    Disputed:       'bg-red-50',
+    Resolved:       'bg-purple-50',
   };
 
   const totalUsdc     = parseFloat(stroopsToUsdc(engagement.totalAmount));
@@ -94,27 +93,21 @@ function MilestoneRow({
     finally { setLoading(false); }
   };
 
-  // Permissions
-  const canUnlock = isActive && milestone.kind === 'Retention'
+  const canUnlock      = isActive && milestone.kind === 'Retention'
     && milestone.status === 'Locked' && timer?.unlockable;
-
-  const canSubmitProof = isActive && milestone.status === 'Pending'
-    && userRole === 'recruiter';
-
-  const canConfirm = isActive && milestone.status === 'ProofSubmitted'
-    && userRole === 'company';
-
-  const canDispute = isActive && milestone.status === 'ProofSubmitted'
-    && userRole === 'company';
-
-  const canResolve = isActive && milestone.status === 'Disputed'
-    && userRole === 'arbiter';
+  const canSubmitProof = isActive && milestone.status === 'Pending' && userRole === 'recruiter';
+  const canConfirm     = isActive && milestone.status === 'ProofSubmitted' && userRole === 'company';
+  const canDispute     = isActive && milestone.status === 'ProofSubmitted' && userRole === 'company';
+  const canResolve     = isActive && milestone.status === 'Disputed' && userRole === 'arbiter';
 
   return (
-    <div className="p-5">
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', iconBg[milestone.status])}>
+    <div className="p-4 sm:p-5">
+      <div className="flex items-start gap-3 sm:gap-4">
+        {/* Status icon */}
+        <div className={cn(
+          'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
+          iconBg[milestone.status],
+        )}>
           {statusIcon[milestone.status]}
         </div>
 
@@ -126,14 +119,13 @@ function MilestoneRow({
               {milestoneStatusLabel(milestone.status)}
             </span>
             {milestone.kind === 'Retention' && (
-              <span className="badge bg-amber-50 text-amber-700 text-[10px]">
-                Retention
-              </span>
+              <span className="badge bg-amber-50 text-amber-700 text-[10px]">Retention</span>
             )}
           </div>
 
           <p className="text-xs text-gray-400 mb-2">
-            {milestone.paymentPercent}% — <span className="font-medium text-gray-600">${milestoneUsdc} USDC</span>
+            {milestone.paymentPercent}% —{' '}
+            <span className="font-medium text-gray-600">${milestoneUsdc} USDC</span>
           </p>
 
           {/* Retention timer */}
@@ -149,17 +141,17 @@ function MilestoneRow({
 
           {/* Proof hash */}
           {milestone.proofHash && (
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-xs text-gray-400">Proof:</span>
+            <div className="flex items-center gap-1.5 mb-2 min-w-0">
+              <span className="text-xs text-gray-400 flex-shrink-0">Proof:</span>
               <a
                 href={milestone.proofHash.startsWith('ipfs://')
                   ? `https://ipfs.io/ipfs/${milestone.proofHash.replace('ipfs://', '')}`
                   : milestone.proofHash}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-brand-600 hover:underline font-mono truncate max-w-xs flex items-center gap-1"
+                className="text-xs text-brand-600 hover:underline font-mono truncate flex items-center gap-1 min-w-0"
               >
-                {milestone.proofHash}
+                <span className="truncate">{milestone.proofHash}</span>
                 <ExternalLink className="w-3 h-3 flex-shrink-0" />
               </a>
             </div>
@@ -189,7 +181,7 @@ function MilestoneRow({
                   engagementId: engagement.id,
                   milestoneIndex: milestone.milestoneIndex,
                 }))}
-                className="btn-primary text-xs"
+                className="btn-primary text-xs min-h-[44px]"
               >
                 <Lock className="w-3.5 h-3.5" />
                 Unlock milestone
@@ -199,13 +191,13 @@ function MilestoneRow({
             {/* Submit proof */}
             {canSubmitProof && !loading && (
               showProofInput ? (
-                <div className="flex items-center gap-2 w-full">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
                   <input
                     type="text"
                     placeholder="ipfs://Qm... or https://..."
                     value={proofInput}
                     onChange={(e) => setProofInput(e.target.value)}
-                    className="input flex-1 text-xs"
+                    className="input flex-1 text-xs min-h-[44px]"
                     onKeyDown={(e) => e.key === 'Enter' && wrap(() => {
                       if (!proofInput.trim()) throw new Error('Enter a proof hash');
                       return submitProof({
@@ -216,28 +208,36 @@ function MilestoneRow({
                       }).then(() => { setShowProofInput(false); setProofInput(''); });
                     })}
                   />
-                  <button
-                    onClick={() => wrap(async () => {
-                      if (!proofInput.trim()) throw new Error('Enter a proof hash');
-                      await submitProof({
-                        callerAddress: address!,
-                        engagementId: engagement.id,
-                        milestoneIndex: milestone.milestoneIndex,
-                        proofHash: proofInput.trim(),
-                      });
-                      setShowProofInput(false);
-                      setProofInput('');
-                    })}
-                    className="btn-primary text-xs"
-                  >
-                    Submit
-                  </button>
-                  <button onClick={() => setShowProofInput(false)} className="btn-ghost text-xs">
-                    Cancel
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => wrap(async () => {
+                        if (!proofInput.trim()) throw new Error('Enter a proof hash');
+                        await submitProof({
+                          callerAddress: address!,
+                          engagementId: engagement.id,
+                          milestoneIndex: milestone.milestoneIndex,
+                          proofHash: proofInput.trim(),
+                        });
+                        setShowProofInput(false);
+                        setProofInput('');
+                      })}
+                      className="btn-primary text-xs flex-1 sm:flex-none min-h-[44px]"
+                    >
+                      Submit
+                    </button>
+                    <button
+                      onClick={() => setShowProofInput(false)}
+                      className="btn-ghost text-xs flex-1 sm:flex-none min-h-[44px]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <button onClick={() => setShowProofInput(true)} className="btn-secondary text-xs">
+                <button
+                  onClick={() => setShowProofInput(true)}
+                  className="btn-secondary text-xs min-h-[44px]"
+                >
                   <Upload className="w-3.5 h-3.5" />
                   Submit proof
                 </button>
@@ -248,21 +248,27 @@ function MilestoneRow({
             {!loading && (
               <>
                 {canConfirm && (
-                  <button onClick={() => wrap(() => confirmMilestone({
-                    callerAddress: address!,
-                    engagementId: engagement.id,
-                    milestoneIndex: milestone.milestoneIndex,
-                  }))} className="btn-primary text-xs">
+                  <button
+                    onClick={() => wrap(() => confirmMilestone({
+                      callerAddress: address!,
+                      engagementId: engagement.id,
+                      milestoneIndex: milestone.milestoneIndex,
+                    }))}
+                    className="btn-primary text-xs min-h-[44px]"
+                  >
                     <ThumbsUp className="w-3.5 h-3.5" />
                     Confirm & release
                   </button>
                 )}
                 {canDispute && (
-                  <button onClick={() => wrap(() => raiseDispute({
-                    callerAddress: address!,
-                    engagementId: engagement.id,
-                    milestoneIndex: milestone.milestoneIndex,
-                  }))} className="btn-danger text-xs">
+                  <button
+                    onClick={() => wrap(() => raiseDispute({
+                      callerAddress: address!,
+                      engagementId: engagement.id,
+                      milestoneIndex: milestone.milestoneIndex,
+                    }))}
+                    className="btn-danger text-xs min-h-[44px]"
+                  >
                     <XCircle className="w-3.5 h-3.5" />
                     Dispute
                   </button>
@@ -273,21 +279,27 @@ function MilestoneRow({
             {/* Resolve dispute (arbiter) */}
             {canResolve && !loading && (
               <>
-                <button onClick={() => wrap(() => resolveDispute({
-                  callerAddress: address!,
-                  engagementId: engagement.id,
-                  milestoneIndex: milestone.milestoneIndex,
-                  approve: true,
-                }))} className="btn-primary text-xs">
+                <button
+                  onClick={() => wrap(() => resolveDispute({
+                    callerAddress: address!,
+                    engagementId: engagement.id,
+                    milestoneIndex: milestone.milestoneIndex,
+                    approve: true,
+                  }))}
+                  className="btn-primary text-xs min-h-[44px]"
+                >
                   <ThumbsUp className="w-3.5 h-3.5" />
                   Approve — release payment
                 </button>
-                <button onClick={() => wrap(() => resolveDispute({
-                  callerAddress: address!,
-                  engagementId: engagement.id,
-                  milestoneIndex: milestone.milestoneIndex,
-                  approve: false,
-                }))} className="btn-danger text-xs">
+                <button
+                  onClick={() => wrap(() => resolveDispute({
+                    callerAddress: address!,
+                    engagementId: engagement.id,
+                    milestoneIndex: milestone.milestoneIndex,
+                    approve: false,
+                  }))}
+                  className="btn-danger text-xs min-h-[44px]"
+                >
                   <ThumbsDown className="w-3.5 h-3.5" />
                   Reject — reset proof
                 </button>

@@ -133,7 +133,7 @@ export default function CreateEngagementPage() {
               <input placeholder="e.g. Senior Software Engineer" value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)} required className="input" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="label">Salary range</label>
                 <input placeholder="$120k – $160k" value={salaryRange}
@@ -187,14 +187,14 @@ export default function CreateEngagementPage() {
 
         {/* Milestones */}
         <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Fee milestones</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 Placement milestones unlock immediately. Retention milestones are time-locked.
               </p>
             </div>
-            <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
+            <span className={`flex-shrink-0 text-xs font-medium px-2 py-1 rounded-lg ${
               percentValid ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
             }`}>
               {totalPercent}% / 100%
@@ -204,6 +204,7 @@ export default function CreateEngagementPage() {
           <div className="space-y-3 mb-4">
             {milestones.map((m, i) => (
               <div key={i} className="p-3 rounded-xl border border-gray-100 bg-gray-50">
+                {/* Milestone header: index badge + kind select + remove */}
                 <div className="flex items-center gap-2 mb-2.5">
                   <div className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
                     m.kind === 'PLACEMENT' ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700'
@@ -213,36 +214,39 @@ export default function CreateEngagementPage() {
                   <select
                     value={m.kind}
                     onChange={(e) => update(i, 'kind', e.target.value as 'PLACEMENT' | 'RETENTION')}
-                    className="input py-1.5 w-auto text-xs"
+                    className="input py-1.5 w-auto text-xs min-h-[44px]"
                   >
                     <option value="PLACEMENT">Placement</option>
                     <option value="RETENTION">Retention</option>
                   </select>
                   {milestones.length > 1 && (
                     <button type="button" onClick={() => removeMilestone(i)}
-                      className="ml-auto p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                      className="ml-auto p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                {/* Milestone inputs — stack on mobile, row on sm+ */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <input placeholder="Milestone name" value={m.name}
                     onChange={(e) => update(i, 'name', e.target.value)}
-                    required className="input flex-1 text-xs" />
-                  <div className="relative w-20">
-                    <input type="number" min="1" max="100" value={m.paymentPercent}
-                      onChange={(e) => update(i, 'paymentPercent', Number(e.target.value))}
-                      required className="input pr-6 text-xs" />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
-                  </div>
-                  {m.kind === 'RETENTION' && (
-                    <div className="relative w-24">
-                      <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
-                        onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
-                        required className="input pr-6 text-xs" />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
+                    required className="input flex-1 text-xs min-h-[44px]" />
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 sm:w-20 sm:flex-none">
+                      <input type="number" min="1" max="100" value={m.paymentPercent}
+                        onChange={(e) => update(i, 'paymentPercent', Number(e.target.value))}
+                        required className="input pr-6 text-xs w-full min-h-[44px]" />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
                     </div>
-                  )}
+                    {m.kind === 'RETENTION' && (
+                      <div className="relative flex-1 sm:w-24 sm:flex-none">
+                        <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
+                          onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
+                          required className="input pr-6 text-xs w-full min-h-[44px]" />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {m.kind === 'RETENTION' && (
                   <p className="text-[10px] text-amber-600 mt-1.5 flex items-center gap-1">
@@ -261,15 +265,15 @@ export default function CreateEngagementPage() {
         </div>
 
         {/* Submit */}
-        <div className="flex items-center gap-3">
-          <button type="submit" disabled={loading || !percentValid} className="btn-primary flex-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <button type="submit" disabled={loading || !percentValid} className="btn-primary flex-1 min-h-[44px]">
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin" />{txStep || 'Processing…'}</>
             ) : (
               'Sign & lock fee in escrow'
             )}
           </button>
-          <Link href="/dashboard/engagements" className="btn-secondary">Cancel</Link>
+          <Link href="/dashboard/engagements" className="btn-secondary text-center min-h-[44px] flex items-center justify-center">Cancel</Link>
         </div>
 
         <p className="text-xs text-gray-400 text-center">
