@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Briefcase, Bell, Activity, LogOut, ShieldCheck, X } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Bell, Activity, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { shortAddress, cn } from '@/lib/utils';
 import { useMobileSidebar } from './MobileSidebarContext';
 
 const NAV_ITEMS = [
+  { href: '/dashboard',             label: 'Overview',      icon: LayoutDashboard },
   { href: '/dashboard/engagements', label: 'Engagements', icon: Briefcase },
   { href: '/notifications',         label: 'Notifications', icon: Bell },
   { href: '/dashboard/events',      label: 'Chain Events',  icon: Activity },
@@ -45,7 +46,10 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = pathname.startsWith(href);
+          // Overview route: exact match only to avoid highlighting on every sub-page
+          const active = href === '/dashboard'
+            ? pathname === '/dashboard'
+            : pathname.startsWith(href);
           return (
             <Link
               key={href}

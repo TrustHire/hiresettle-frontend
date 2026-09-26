@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CheckCircle2, Clock, Lock, AlertTriangle,
   Upload, ThumbsUp, ThumbsDown, XCircle, Loader2,
@@ -10,6 +10,8 @@ import {
   unlockMilestone, submitProof, confirmMilestone,
   raiseDispute, resolveDispute,
 } from '@/lib/stellar/contract';
+import { TxProgressModal } from '@/components/ui/TxProgressModal';
+import { useTxProgress } from '@/lib/hooks/use-tx-progress';
 import { milestonesApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import {
@@ -54,13 +56,19 @@ function MilestoneRow({
   const [showProofInput, setShowProofInput] = useState(false);
   const [timer, setTimer]                   = useState<RetentionTimer | null>(null);
 
+  // tx progress modal
+  const { state: txState, open: openTx, reset: resetTx, onStatus } = useTxProgress();
+
+  // Store the last action so Retry can replay it
+  const retryFnRef = useRef<(() => Promise<void>) | null>(null);
+
   useEffect(() => {
     if (milestone.kind === 'Retention' && milestone.status === 'Locked') {
       milestonesApi.getTimer(engagement.id, milestone.milestoneIndex)
         .then(setTimer)
         .catch(() => {});
     }
-  }, [milestone.id, milestone.status]);
+  }, [engagement.id, milestone.id, milestone.kind, milestone.milestoneIndex, milestone.status]);
 
   const isActive = engagement.status === 'Active' || engagement.status === 'ReplacementRequested';
 
@@ -85,13 +93,33 @@ function MilestoneRow({
   const totalUsdc     = parseFloat(stroopsToUsdc(engagement.totalAmount));
   const milestoneUsdc = ((totalUsdc * milestone.paymentPercent) / 100).toFixed(2);
 
-  const wrap = async (fn: () => Promise<void>) => {
+  /**
+   * Wraps a contract call:
+   *  1. Opens the progress modal
+   *  2. Stores the action in retryFnRef for Retry support
+   *  3. Calls the action with onStatus wired up
+   *  4. On success calls onUpdate(); modal stays open until user dismisses
+   *  5. On error the modal shows the failed step — no alert()
+   */
+  const wrap = useCallback(async (fn: () => Promise<void>) => {
     if (!address || loading) return;
+    retryFnRef.current = fn;
+    openTx();
     setLoading(true);
-    try { await fn(); onUpdate(); }
-    catch (err: any) { alert(err?.message ?? 'Transaction failed'); }
-    finally { setLoading(false); }
-  };
+    try {
+      await fn();
+      onUpdate();
+    } catch {
+      // Error state is already reflected in the modal via onStatus events.
+      // No alert() needed.
+    } finally {
+      setLoading(false);
+    }
+  }, [address, loading, openTx, onUpdate]);
+
+  const handleRetry = useCallback(() => {
+    if (retryFnRef.current) wrap(retryFnRef.current);
+  }, [wrap]);
 
   const canUnlock      = isActive && milestone.kind === 'Retention'
     && milestone.status === 'Locked' && timer?.unlockable;
@@ -101,114 +129,121 @@ function MilestoneRow({
   const canResolve     = isActive && milestone.status === 'Disputed' && userRole === 'arbiter';
 
   return (
-    <div className="p-4 sm:p-5">
-      <div className="flex items-start gap-3 sm:gap-4">
-        {/* Status icon */}
-        <div className={cn(
-          'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
-          iconBg[milestone.status],
-        )}>
-          {statusIcon[milestone.status]}
-        </div>
+    <>
+      {/* Transaction progress modal — rendered outside the row layout flow */}
+      <TxProgressModal
+        {...txState}
+        onClose={resetTx}
+        onRetry={handleRetry}
+      />
 
-        <div className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className="text-sm font-medium text-gray-900">{milestone.name}</span>
-            <span className={milestoneStatusBadge(milestone.status)}>
-              {milestoneStatusLabel(milestone.status)}
-            </span>
-            {milestone.kind === 'Retention' && (
-              <span className="badge bg-amber-50 text-amber-700 text-[10px]">Retention</span>
-            )}
+      <div className="p-5">
+        <div className="flex items-start gap-4">
+          {/* Icon */}
+          <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', iconBg[milestone.status])}>
+            {statusIcon[milestone.status]}
           </div>
 
-          <p className="text-xs text-gray-400 mb-2">
-            {milestone.paymentPercent}% —{' '}
-            <span className="font-medium text-gray-600">${milestoneUsdc} USDC</span>
-          </p>
-
-          {/* Retention timer */}
-          {milestone.kind === 'Retention' && milestone.status === 'Locked' && timer && (
-            <div className={cn(timerPillClass(timer.daysRemaining, timer.unlockable), 'mb-2')}>
-              <Clock className="w-3 h-3" />
-              {timer.unlockable
-                ? 'Ready to unlock'
-                : formatRetentionCountdown(timer.daysRemaining)
-              }
+          <div className="flex-1 min-w-0">
+            {/* Header */}
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-sm font-medium text-gray-900">{milestone.name}</span>
+              <span className={milestoneStatusBadge(milestone.status)}>
+                {milestoneStatusLabel(milestone.status)}
+              </span>
+              {milestone.kind === 'Retention' && (
+                <span className="badge bg-amber-50 text-amber-700 text-[10px]">
+                  Retention
+                </span>
+              )}
             </div>
-          )}
 
-          {/* Proof hash */}
-          {milestone.proofHash && (
-            <div className="flex items-center gap-1.5 mb-2 min-w-0">
-              <span className="text-xs text-gray-400 flex-shrink-0">Proof:</span>
-              <a
-                href={milestone.proofHash.startsWith('ipfs://')
-                  ? `https://ipfs.io/ipfs/${milestone.proofHash.replace('ipfs://', '')}`
-                  : milestone.proofHash}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-brand-600 hover:underline font-mono truncate flex items-center gap-1 min-w-0"
-              >
-                <span className="truncate">{milestone.proofHash}</span>
-                <ExternalLink className="w-3 h-3 flex-shrink-0" />
-              </a>
-            </div>
-          )}
-
-          {/* Payment released */}
-          {milestone.paymentReleased && (
-            <p className="text-xs text-green-600 font-medium mb-2">
-              ✓ ${stroopsToUsdc(milestone.paymentReleased)} USDC released
+            <p className="text-xs text-gray-400 mb-2">
+              {milestone.paymentPercent}% — <span className="font-medium text-gray-600">${milestoneUsdc} USDC</span>
             </p>
-          )}
 
-          {/* Actions */}
-          <div className="flex flex-wrap gap-2 mt-3">
-            {loading && (
-              <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Waiting for Freighter…
+            {/* Retention timer */}
+            {milestone.kind === 'Retention' && milestone.status === 'Locked' && timer && (
+              <div className={cn(timerPillClass(timer.daysRemaining, timer.unlockable), 'mb-2')}>
+                <Clock className="w-3 h-3" />
+                {timer.unlockable
+                  ? 'Ready to unlock'
+                  : formatRetentionCountdown(timer.daysRemaining)
+                }
               </div>
             )}
 
-            {/* Unlock */}
-            {canUnlock && !loading && (
-              <button
-                onClick={() => wrap(() => unlockMilestone({
-                  callerAddress: address!,
-                  engagementId: engagement.id,
-                  milestoneIndex: milestone.milestoneIndex,
-                }))}
-                className="btn-primary text-xs min-h-[44px]"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                Unlock milestone
-              </button>
+            {/* Proof hash */}
+            {milestone.proofHash && (
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-xs text-gray-400">Proof:</span>
+                <a
+                  href={milestone.proofHash.startsWith('ipfs://')
+                    ? `https://ipfs.io/ipfs/${milestone.proofHash.replace('ipfs://', '')}`
+                    : milestone.proofHash}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-brand-600 hover:underline font-mono truncate max-w-xs flex items-center gap-1"
+                >
+                  {milestone.proofHash}
+                  <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                </a>
+              </div>
             )}
 
-            {/* Submit proof */}
-            {canSubmitProof && !loading && (
-              showProofInput ? (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
-                  <input
-                    type="text"
-                    placeholder="ipfs://Qm... or https://..."
-                    value={proofInput}
-                    onChange={(e) => setProofInput(e.target.value)}
-                    className="input flex-1 text-xs min-h-[44px]"
-                    onKeyDown={(e) => e.key === 'Enter' && wrap(() => {
-                      if (!proofInput.trim()) throw new Error('Enter a proof hash');
-                      return submitProof({
-                        callerAddress: address!,
-                        engagementId: engagement.id,
-                        milestoneIndex: milestone.milestoneIndex,
-                        proofHash: proofInput.trim(),
-                      }).then(() => { setShowProofInput(false); setProofInput(''); });
-                    })}
-                  />
-                  <div className="flex gap-2">
+            {/* Payment released */}
+            {milestone.paymentReleased && (
+              <p className="text-xs text-green-600 font-medium mb-2">
+                ✓ ${stroopsToUsdc(milestone.paymentReleased)} USDC released
+              </p>
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {loading && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Processing…
+                </div>
+              )}
+
+              {/* Unlock */}
+              {canUnlock && !loading && (
+                <button
+                  onClick={() => wrap(() => unlockMilestone({
+                    callerAddress: address!,
+                    engagementId: engagement.id,
+                    milestoneIndex: milestone.milestoneIndex,
+                  }, onStatus))}
+                  className="btn-primary text-xs"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  Unlock milestone
+                </button>
+              )}
+
+              {/* Submit proof */}
+              {canSubmitProof && !loading && (
+                showProofInput ? (
+                  <div className="flex items-center gap-2 w-full">
+                    <input
+                      type="text"
+                      placeholder="ipfs://Qm... or https://..."
+                      value={proofInput}
+                      onChange={(e) => setProofInput(e.target.value)}
+                      className="input flex-1 text-xs"
+                      onKeyDown={(e) => e.key === 'Enter' && wrap(async () => {
+                        if (!proofInput.trim()) throw new Error('Enter a proof hash');
+                        await submitProof({
+                          callerAddress: address!,
+                          engagementId: engagement.id,
+                          milestoneIndex: milestone.milestoneIndex,
+                          proofHash: proofInput.trim(),
+                        }, onStatus);
+                        setShowProofInput(false);
+                        setProofInput('');
+                      })}
+                    />
                     <button
                       onClick={() => wrap(async () => {
                         if (!proofInput.trim()) throw new Error('Enter a proof hash');
@@ -217,97 +252,91 @@ function MilestoneRow({
                           engagementId: engagement.id,
                           milestoneIndex: milestone.milestoneIndex,
                           proofHash: proofInput.trim(),
-                        });
+                        }, onStatus);
                         setShowProofInput(false);
                         setProofInput('');
                       })}
-                      className="btn-primary text-xs flex-1 sm:flex-none min-h-[44px]"
+                      className="btn-primary text-xs"
                     >
                       Submit
                     </button>
-                    <button
-                      onClick={() => setShowProofInput(false)}
-                      className="btn-ghost text-xs flex-1 sm:flex-none min-h-[44px]"
-                    >
+                    <button onClick={() => setShowProofInput(false)} className="btn-ghost text-xs">
                       Cancel
                     </button>
                   </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowProofInput(true)}
-                  className="btn-secondary text-xs min-h-[44px]"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  Submit proof
-                </button>
-              )
-            )}
+                ) : (
+                  <button onClick={() => setShowProofInput(true)} className="btn-secondary text-xs">
+                    <Upload className="w-3.5 h-3.5" />
+                    Submit proof
+                  </button>
+                )
+              )}
 
-            {/* Confirm / Dispute (company) */}
-            {!loading && (
-              <>
-                {canConfirm && (
+              {/* Confirm / Dispute (company) */}
+              {!loading && (
+                <>
+                  {canConfirm && (
+                    <button
+                      onClick={() => wrap(() => confirmMilestone({
+                        callerAddress: address!,
+                        engagementId: engagement.id,
+                        milestoneIndex: milestone.milestoneIndex,
+                      }, onStatus))}
+                      className="btn-primary text-xs"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                      Confirm & release
+                    </button>
+                  )}
+                  {canDispute && (
+                    <button
+                      onClick={() => wrap(() => raiseDispute({
+                        callerAddress: address!,
+                        engagementId: engagement.id,
+                        milestoneIndex: milestone.milestoneIndex,
+                      }, onStatus))}
+                      className="btn-danger text-xs"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Dispute
+                    </button>
+                  )}
+                </>
+              )}
+
+              {/* Resolve dispute (arbiter) */}
+              {canResolve && !loading && (
+                <>
                   <button
-                    onClick={() => wrap(() => confirmMilestone({
+                    onClick={() => wrap(() => resolveDispute({
                       callerAddress: address!,
                       engagementId: engagement.id,
                       milestoneIndex: milestone.milestoneIndex,
-                    }))}
-                    className="btn-primary text-xs min-h-[44px]"
+                      approve: true,
+                    }, onStatus))}
+                    className="btn-primary text-xs"
                   >
                     <ThumbsUp className="w-3.5 h-3.5" />
-                    Confirm & release
+                    Approve — release payment
                   </button>
-                )}
-                {canDispute && (
                   <button
-                    onClick={() => wrap(() => raiseDispute({
+                    onClick={() => wrap(() => resolveDispute({
                       callerAddress: address!,
                       engagementId: engagement.id,
                       milestoneIndex: milestone.milestoneIndex,
-                    }))}
-                    className="btn-danger text-xs min-h-[44px]"
+                      approve: false,
+                    }, onStatus))}
+                    className="btn-danger text-xs"
                   >
-                    <XCircle className="w-3.5 h-3.5" />
-                    Dispute
+                    <ThumbsDown className="w-3.5 h-3.5" />
+                    Reject — reset proof
                   </button>
-                )}
-              </>
-            )}
-
-            {/* Resolve dispute (arbiter) */}
-            {canResolve && !loading && (
-              <>
-                <button
-                  onClick={() => wrap(() => resolveDispute({
-                    callerAddress: address!,
-                    engagementId: engagement.id,
-                    milestoneIndex: milestone.milestoneIndex,
-                    approve: true,
-                  }))}
-                  className="btn-primary text-xs min-h-[44px]"
-                >
-                  <ThumbsUp className="w-3.5 h-3.5" />
-                  Approve — release payment
-                </button>
-                <button
-                  onClick={() => wrap(() => resolveDispute({
-                    callerAddress: address!,
-                    engagementId: engagement.id,
-                    milestoneIndex: milestone.milestoneIndex,
-                    approve: false,
-                  }))}
-                  className="btn-danger text-xs min-h-[44px]"
-                >
-                  <ThumbsDown className="w-3.5 h-3.5" />
-                  Reject — reset proof
-                </button>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
