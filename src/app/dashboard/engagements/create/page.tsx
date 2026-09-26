@@ -323,7 +323,7 @@ export default function CreateEngagementPage() {
 
         {/* ── Milestones ── */}
         <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Fee milestones</h2>
               <p className="text-xs text-gray-400 mt-0.5">
@@ -362,14 +362,14 @@ export default function CreateEngagementPage() {
                   <select
                     value={m.kind}
                     onChange={(e) => update(i, 'kind', e.target.value as 'PLACEMENT' | 'RETENTION')}
-                    className="input py-1.5 w-auto text-xs"
+                    className="input py-1.5 w-auto text-xs min-h-[44px]"
                   >
                     <option value="PLACEMENT">Placement</option>
                     <option value="RETENTION">Retention</option>
                   </select>
                   {milestones.length > 1 && (
                     <button type="button" onClick={() => removeMilestone(i)}
-                      className="ml-auto p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                      className="ml-auto p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -400,7 +400,15 @@ export default function CreateEngagementPage() {
                       />
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
                     </div>
-                  )}
+                    {m.kind === 'RETENTION' && (
+                      <div className="relative flex-1 sm:w-24 sm:flex-none">
+                        <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
+                          onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
+                          required className="input pr-6 text-xs w-full min-h-[44px]" />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {m.kind === 'RETENTION' && milestoneRetentionErrors[i] && (
@@ -436,7 +444,7 @@ export default function CreateEngagementPage() {
               'Sign & lock fee in escrow'
             )}
           </button>
-          <Link href="/dashboard/engagements" className="btn-secondary">Cancel</Link>
+          <Link href="/dashboard/engagements" className="btn-secondary text-center min-h-[44px] flex items-center justify-center">Cancel</Link>
         </div>
 
         <p className="text-xs text-gray-400 text-center">

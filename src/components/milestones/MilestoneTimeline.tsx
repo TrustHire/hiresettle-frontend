@@ -62,7 +62,6 @@ function MilestoneRow({
   // Store the last action so Retry can replay it
   const retryFnRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Fetch retention timer for Locked milestones
   useEffect(() => {
     if (milestone.kind === 'Retention' && milestone.status === 'Locked') {
       milestonesApi.getTimer(engagement.id, milestone.milestoneIndex)
@@ -74,21 +73,21 @@ function MilestoneRow({
   const isActive = engagement.status === 'Active' || engagement.status === 'ReplacementRequested';
 
   const statusIcon: Record<MilestoneStatus, JSX.Element> = {
-    Locked:        <Lock className="w-4 h-4 text-gray-400" />,
-    Pending:       <Clock className="w-4 h-4 text-sky-500" />,
-    ProofSubmitted:<Upload className="w-4 h-4 text-amber-500" />,
-    Confirmed:     <CheckCircle2 className="w-4 h-4 text-green-500" />,
-    Disputed:      <AlertTriangle className="w-4 h-4 text-red-500" />,
-    Resolved:      <CheckCircle2 className="w-4 h-4 text-purple-500" />,
+    Locked:         <Lock className="w-4 h-4 text-gray-400" />,
+    Pending:        <Clock className="w-4 h-4 text-sky-500" />,
+    ProofSubmitted: <Upload className="w-4 h-4 text-amber-500" />,
+    Confirmed:      <CheckCircle2 className="w-4 h-4 text-green-500" />,
+    Disputed:       <AlertTriangle className="w-4 h-4 text-red-500" />,
+    Resolved:       <CheckCircle2 className="w-4 h-4 text-purple-500" />,
   };
 
   const iconBg: Record<MilestoneStatus, string> = {
-    Locked:        'bg-gray-50',
-    Pending:       'bg-sky-50',
-    ProofSubmitted:'bg-amber-50',
-    Confirmed:     'bg-green-50',
-    Disputed:      'bg-red-50',
-    Resolved:      'bg-purple-50',
+    Locked:         'bg-gray-50',
+    Pending:        'bg-sky-50',
+    ProofSubmitted: 'bg-amber-50',
+    Confirmed:      'bg-green-50',
+    Disputed:       'bg-red-50',
+    Resolved:       'bg-purple-50',
   };
 
   const totalUsdc     = parseFloat(stroopsToUsdc(engagement.totalAmount));
@@ -122,21 +121,12 @@ function MilestoneRow({
     if (retryFnRef.current) wrap(retryFnRef.current);
   }, [wrap]);
 
-  // Permissions
-  const canUnlock = isActive && milestone.kind === 'Retention'
+  const canUnlock      = isActive && milestone.kind === 'Retention'
     && milestone.status === 'Locked' && timer?.unlockable;
-
-  const canSubmitProof = isActive && milestone.status === 'Pending'
-    && userRole === 'recruiter';
-
-  const canConfirm = isActive && milestone.status === 'ProofSubmitted'
-    && userRole === 'company';
-
-  const canDispute = isActive && milestone.status === 'ProofSubmitted'
-    && userRole === 'company';
-
-  const canResolve = isActive && milestone.status === 'Disputed'
-    && userRole === 'arbiter';
+  const canSubmitProof = isActive && milestone.status === 'Pending' && userRole === 'recruiter';
+  const canConfirm     = isActive && milestone.status === 'ProofSubmitted' && userRole === 'company';
+  const canDispute     = isActive && milestone.status === 'ProofSubmitted' && userRole === 'company';
+  const canResolve     = isActive && milestone.status === 'Disputed' && userRole === 'arbiter';
 
   return (
     <>
