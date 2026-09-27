@@ -44,7 +44,9 @@ export const engagementsApi = {
   list: async (params?: {
     companyAddress?: string;
     recruiterAddress?: string;
+    arbiterAddress?: string;
     status?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<Engagement>> => {

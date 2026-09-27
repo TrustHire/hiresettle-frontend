@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Bell, LogOut, RefreshCw, Wifi, X } from 'lucide-react';
 import { useFreighterWatcher } from '@/lib/hooks/use-freighter-watcher';
