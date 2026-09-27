@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CheckCircle2, Clock, Lock, AlertTriangle,
   Upload, ThumbsUp, ThumbsDown, XCircle, Loader2,
-  ExternalLink,
+  ExternalLink, Copy, Check, CalendarPlus, Download, ChevronDown,
 } from 'lucide-react';
 import {
   unlockMilestone, submitProof, confirmMilestone,
@@ -16,9 +16,10 @@ import { milestonesApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import {
   milestoneStatusBadge, milestoneStatusLabel,
-  stroopsToUsdc, cn, formatRetentionCountdown, timerPillClass,
+  stroopsToUsdc, cn, formatRetentionCountdown, formatLiveCountdown, timerPillClass,
 } from '@/lib/utils';
 import type { Engagement, Milestone, MilestoneStatus, RetentionTimer } from '@/types';
+import { ProofSubmitForm } from './ProofSubmitForm';
 
 interface Props {
   engagement: Engagement;
@@ -40,6 +41,240 @@ export function MilestoneTimeline({ engagement, userRole, onUpdate }: Props) {
       ))}
     </div>
   );
+}
+
+const IPFS_GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY ?? 'https://ipfs.io';
+
+/** Returns true for bare CIDs (Qm… v0 or bafy… v1) and ipfs:// URIs. */
+function isIpfs(hash: string): boolean {
+  return (
+    hash.startsWith('ipfs://') ||
+    /^Qm[1-9A-HJ-NP-Za-km-z]{44,}/.test(hash) ||
+    /^bafy[a-z2-7]{52,}/.test(hash)
+  );
+}
+
+function resolveProofUrl(hash: string): string {
+  if (hash.startsWith('ipfs://')) {
+    return `${IPFS_GATEWAY}/ipfs/${hash.slice(7)}`;
+  }
+  if (isIpfs(hash)) {
+    return `${IPFS_GATEWAY}/ipfs/${hash}`;
+  }
+  return hash;
+}
+
+function ProofLink({ hash }: { hash: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(async () => {
+    await navigator.clipboard.writeText(hash);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [hash]);
+
+  const url = resolveProofUrl(hash);
+  const label = hash.length > 40 ? `${hash.slice(0, 20)}…${hash.slice(-6)}` : hash;
+
+  return (
+    <div className="flex items-center gap-1.5 mb-2">
+      <span className="text-xs text-gray-400">Proof:</span>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={hash}
+        className="text-xs text-brand-600 hover:underline font-mono truncate max-w-xs flex items-center gap-1"
+      >
+        {label}
+        <ExternalLink className="w-3 h-3 flex-shrink-0" />
+      </a>
+      <button
+        onClick={copy}
+        title="Copy raw hash"
+        className="text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        {copied
+          ? <Check className="w-3.5 h-3.5 text-green-500" />
+          : <Copy className="w-3.5 h-3.5" />
+        }
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add to Calendar
+// ---------------------------------------------------------------------------
+
+/** Format a Date as a compact iCalendar datetime string: 20250601T090000Z */
+function icsDate(d: Date): string {
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function buildIcs({
+  title, description, url, start,
+}: { title: string; description: string; url: string; start: Date }): string {
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // 1-hour block
+  const now = icsDate(new Date());
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//HireSettle//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${crypto.randomUUID()}`,
+    `DTSTAMP:${now}`,
+    `DTSTART:${icsDate(start)}`,
+    `DTEND:${icsDate(end)}`,
+    `SUMMARY:${title}`,
+    `DESCRIPTION:${description.replace(/\n/g, '\\n')}`,
+    `URL:${url}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+}
+
+function buildGoogleUrl({
+  title, description, url, start,
+}: { title: string; description: string; url: string; start: Date }): string {
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z/, 'Z');
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: `${description}\n\n${url}`,
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+
+function AddToCalendar({
+  unlockAt, milestoneName, jobTitle, engagementId,
+}: {
+  unlockAt: Date;
+  milestoneName: string;
+  jobTitle: string;
+  engagementId: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const engagementUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/dashboard/engagements/${engagementId}`
+      : `/dashboard/engagements/${engagementId}`;
+
+  const title = `Retention unlock: ${milestoneName} — ${jobTitle}`;
+  const description = `The retention milestone "${milestoneName}" for "${jobTitle}" is estimated to unlock on this date.\n\nEngagement: ${engagementUrl}`;
+  const calParams = { title, description, url: engagementUrl, start: unlockAt };
+
+  const downloadIcs = () => {
+    const blob = new Blob([buildIcs(calParams)], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `retention-unlock-${engagementId}.ics`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-brand-600 transition-colors"
+        aria-haspopup="true"
+        aria-expanded={open}
+      >
+        <CalendarPlus className="w-3.5 h-3.5" />
+        Add to calendar
+        <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop to close on outside click */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
+          <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-md py-1 min-w-[170px]">
+            <button
+              onClick={downloadIcs}
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+            >
+              <Download className="w-3.5 h-3.5 text-gray-400" />
+              Download .ics
+            </button>
+            <a
+              href={buildGoogleUrl(calParams)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
+              Google Calendar
+            </a>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Live countdown hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Drives a ticking countdown toward `estimatedUnlockAt`.
+ * - Ticks every 60 s while >= 1 h remains
+ * - Switches to every 1 s in the last hour
+ * - Calls `onExpired` once when the local clock passes zero so the parent
+ *   can refetch the timer and surface the Unlock button without a reload
+ */
+function useRetentionCountdown(
+  estimatedUnlockAt: string | null,
+  onExpired: () => void,
+): { msRemaining: number; label: string } {
+  const getMs = useCallback(
+    () => estimatedUnlockAt
+      ? Math.max(0, new Date(estimatedUnlockAt).getTime() - Date.now())
+      : -1,
+    [estimatedUnlockAt],
+  );
+
+  const [msRemaining, setMsRemaining] = useState<number>(getMs);
+
+  useEffect(() => {
+    if (!estimatedUnlockAt) return;
+
+    let expired = false;
+
+    const tick = () => {
+      const ms = getMs();
+      setMsRemaining(ms);
+      if (ms <= 0 && !expired) {
+        expired = true;
+        onExpired();
+      }
+    };
+
+    // Pick interval: <1 h → every second, otherwise every minute
+    const intervalMs = msRemaining > 0 && msRemaining < 3600_000 ? 1_000 : 60_000;
+    const id = setInterval(tick, intervalMs);
+
+    return () => clearInterval(id);
+  // Re-run when we cross the 1-hour threshold (msRemaining bucket changes)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimatedUnlockAt, msRemaining < 3600_000]);
+
+  const label = msRemaining < 0
+    ? formatRetentionCountdown(0)          // no date — fall back to static
+    : msRemaining >= 48 * 3600_000
+      ? formatRetentionCountdown(Math.ceil(msRemaining / 86400_000))  // coarse days
+      : formatLiveCountdown(msRemaining);
+
+  return { msRemaining, label };
 }
 
 function MilestoneRow({
