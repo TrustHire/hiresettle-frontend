@@ -18,6 +18,9 @@ import {
   milestoneStatusBadge, milestoneStatusLabel,
   stroopsToUsdc, cn, formatRetentionCountdown, formatLiveCountdown, timerPillClass,
 } from '@/lib/utils';
+import { toast } from 'sonner';
+import { toReadableError } from '@/lib/utils/toast-error';
+import { downloadIcs, googleCalendarUrl } from '@/lib/utils/calendar';
 import type { Engagement, Milestone, MilestoneStatus, RetentionTimer } from '@/types';
 import { ProofSubmitForm } from './ProofSubmitForm';
 
@@ -573,5 +576,85 @@ function MilestoneRow({
         </div>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CalendarMenu — dropdown for adding a retention unlock reminder
+// ---------------------------------------------------------------------------
+
+interface CalendarMenuProps {
+  unlockDate: Date;
+  title: string;
+  description: string;
+  engagementId: string;
+}
+
+function CalendarMenu({ unlockDate, title, description, engagementId }: CalendarMenuProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const detailUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/dashboard/engagements/${engagementId}`
+      : '';
+
+  const calEvent = {
+    title,
+    description,
+    startDate: unlockDate,
+    durationMinutes: 60,
+    url: detailUrl,
+  };
+
+  const handleDownload = () => {
+    downloadIcs(calEvent);
+    setOpen(false);
+  };
+
+  const handleGoogle = () => {
+    window.open(googleCalendarUrl(calEvent), '_blank', 'noopener,noreferrer');
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="btn-ghost text-xs flex items-center gap-1.5"
+        title="Add to calendar"
+      >
+        <CalendarPlus className="w-3.5 h-3.5" />
+        Add to calendar
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-20 w-48 rounded-xl bg-white border border-gray-100 shadow-lg py-1">
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-gray-400" />
+            Download .ics file
+          </button>
+          <button
+            onClick={handleGoogle}
+            className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Chrome className="w-3.5 h-3.5 text-gray-400" />
+            Google Calendar
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

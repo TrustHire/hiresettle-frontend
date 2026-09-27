@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { requestReplacement } from '@/lib/stellar/contract';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
+import { toReadableError } from '@/lib/utils/toast-error';
 import type { Engagement } from '@/types';
 
 interface Props {
@@ -11,6 +13,12 @@ interface Props {
   userRole: string;
   onUpdate: () => void;
 }
+
+const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
+const explorerUrl = (txHash: string) =>
+  NETWORK === 'mainnet'
+    ? `https://stellar.expert/explorer/public/tx/${txHash}`
+    : `https://stellar.expert/explorer/testnet/tx/${txHash}`;
 
 export function ReplacementBanner({ engagement, userRole, onUpdate }: Props) {
   const { address } = useAuthStore();
@@ -20,10 +28,17 @@ export function ReplacementBanner({ engagement, userRole, onUpdate }: Props) {
     if (!address || loading) return;
     setLoading(true);
     try {
-      await requestReplacement({ callerAddress: address, engagementId: engagement.id });
+      const txHash = await requestReplacement({ callerAddress: address, engagementId: engagement.id });
       onUpdate();
+      toast.success('Replacement requested', {
+        description: 'The recruiter has been notified to submit proof for the replacement candidate.',
+        action: {
+          label: 'View on explorer',
+          onClick: () => window.open(explorerUrl(txHash), '_blank'),
+        },
+      });
     } catch (err: any) {
-      alert(err?.message ?? 'Transaction failed');
+      toast.error(toReadableError(err));
     } finally {
       setLoading(false);
     }

@@ -107,7 +107,7 @@ export default function EngagementDetailPage() {
       )}
 
       {/* Progress */}
-      <EngagementProgress engagement={engagement} />
+      <EngagementProgress engagement={engagement} onSync={handleSync} />
 
       {/* Milestones */}
       <div className="mt-5">
