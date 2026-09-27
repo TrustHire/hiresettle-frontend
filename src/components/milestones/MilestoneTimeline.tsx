@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   CheckCircle2, Clock, Lock, AlertTriangle,
   Upload, ThumbsUp, ThumbsDown, XCircle, Loader2,
-  ExternalLink,
+  ExternalLink, CalendarPlus, Download, Chrome,
 } from 'lucide-react';
 import {
   unlockMilestone, submitProof, confirmMilestone,
@@ -16,6 +16,9 @@ import {
   milestoneStatusBadge, milestoneStatusLabel,
   stroopsToUsdc, cn, formatRetentionCountdown, timerPillClass,
 } from '@/lib/utils';
+import { toast } from 'sonner';
+import { toReadableError } from '@/lib/utils/toast-error';
+import { downloadIcs, googleCalendarUrl } from '@/lib/utils/calendar';
 import type { Engagement, Milestone, MilestoneStatus, RetentionTimer } from '@/types';
 
 interface Props {
@@ -86,12 +89,30 @@ function MilestoneRow({
   const totalUsdc     = parseFloat(stroopsToUsdc(engagement.totalAmount));
   const milestoneUsdc = ((totalUsdc * milestone.paymentPercent) / 100).toFixed(2);
 
-  const wrap = async (fn: () => Promise<void>) => {
+  const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
+  const explorerUrl = (txHash: string) =>
+    NETWORK === 'mainnet'
+      ? `https://stellar.expert/explorer/public/tx/${txHash}`
+      : `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+
+  const wrap = async (fn: () => Promise<string>, successLabel: string) => {
     if (!address || loading) return;
     setLoading(true);
-    try { await fn(); onUpdate(); }
-    catch (err: any) { alert(err?.message ?? 'Transaction failed'); }
-    finally { setLoading(false); }
+    try {
+      const txHash = await fn();
+      onUpdate();
+      toast.success(successLabel, {
+        description: 'Transaction confirmed on Stellar.',
+        action: {
+          label: 'View on explorer',
+          onClick: () => window.open(explorerUrl(txHash), '_blank'),
+        },
+      });
+    } catch (err: any) {
+      toast.error(toReadableError(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Permissions
@@ -138,12 +159,28 @@ function MilestoneRow({
 
           {/* Retention timer */}
           {milestone.kind === 'Retention' && milestone.status === 'Locked' && timer && (
-            <div className={cn(timerPillClass(timer.daysRemaining, timer.unlockable), 'mb-2')}>
-              <Clock className="w-3 h-3" />
-              {timer.unlockable
-                ? 'Ready to unlock'
-                : formatRetentionCountdown(timer.daysRemaining)
-              }
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <div className={cn(timerPillClass(timer.daysRemaining, timer.unlockable))}>
+                <Clock className="w-3 h-3" />
+                {timer.unlockable
+                  ? 'Ready to unlock'
+                  : formatRetentionCountdown(timer.daysRemaining)
+                }
+              </div>
+              {!timer.unlockable && (timer.estimatedUnlockAt ?? milestone.unlockEstimatedAt) && (
+                <CalendarMenu
+                  unlockDate={new Date(
+                    (timer.estimatedUnlockAt ?? milestone.unlockEstimatedAt)!
+                  )}
+                  title={`Retention unlock: ${milestone.name}`}
+                  description={
+                    `Milestone "${milestone.name}" on engagement ${engagement.id} ` +
+                    `(${engagement.jobTitle}) becomes unlockable on this date.\n\n` +
+                    `Check the HireSettle dashboard to unlock it.`
+                  }
+                  engagementId={engagement.id}
+                />
+              )}
             </div>
           )}
 
@@ -188,7 +225,7 @@ function MilestoneRow({
                   callerAddress: address!,
                   engagementId: engagement.id,
                   milestoneIndex: milestone.milestoneIndex,
-                }))}
+                }), 'Milestone unlocked')}
                 className="btn-primary text-xs"
               >
                 <Lock className="w-3.5 h-3.5" />
@@ -213,13 +250,13 @@ function MilestoneRow({
                         engagementId: engagement.id,
                         milestoneIndex: milestone.milestoneIndex,
                         proofHash: proofInput.trim(),
-                      }).then(() => { setShowProofInput(false); setProofInput(''); });
-                    })}
+                      }).then((txHash) => { setShowProofInput(false); setProofInput(''); return txHash; });
+                    }, 'Proof submitted')}
                   />
                   <button
                     onClick={() => wrap(async () => {
                       if (!proofInput.trim()) throw new Error('Enter a proof hash');
-                      await submitProof({
+                      const txHash = await submitProof({
                         callerAddress: address!,
                         engagementId: engagement.id,
                         milestoneIndex: milestone.milestoneIndex,
@@ -227,7 +264,8 @@ function MilestoneRow({
                       });
                       setShowProofInput(false);
                       setProofInput('');
-                    })}
+                      return txHash;
+                    }, 'Proof submitted')}
                     className="btn-primary text-xs"
                   >
                     Submit
@@ -252,7 +290,7 @@ function MilestoneRow({
                     callerAddress: address!,
                     engagementId: engagement.id,
                     milestoneIndex: milestone.milestoneIndex,
-                  }))} className="btn-primary text-xs">
+                  }), 'Milestone confirmed — payment released')} className="btn-primary text-xs">
                     <ThumbsUp className="w-3.5 h-3.5" />
                     Confirm & release
                   </button>
@@ -262,7 +300,7 @@ function MilestoneRow({
                     callerAddress: address!,
                     engagementId: engagement.id,
                     milestoneIndex: milestone.milestoneIndex,
-                  }))} className="btn-danger text-xs">
+                  }), 'Dispute raised')} className="btn-danger text-xs">
                     <XCircle className="w-3.5 h-3.5" />
                     Dispute
                   </button>
@@ -278,7 +316,7 @@ function MilestoneRow({
                   engagementId: engagement.id,
                   milestoneIndex: milestone.milestoneIndex,
                   approve: true,
-                }))} className="btn-primary text-xs">
+                }), 'Dispute resolved — payment released')} className="btn-primary text-xs">
                   <ThumbsUp className="w-3.5 h-3.5" />
                   Approve — release payment
                 </button>
@@ -287,7 +325,7 @@ function MilestoneRow({
                   engagementId: engagement.id,
                   milestoneIndex: milestone.milestoneIndex,
                   approve: false,
-                }))} className="btn-danger text-xs">
+                }), 'Dispute resolved — proof reset')} className="btn-danger text-xs">
                   <ThumbsDown className="w-3.5 h-3.5" />
                   Reject — reset proof
                 </button>
@@ -296,6 +334,86 @@ function MilestoneRow({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CalendarMenu — dropdown for adding a retention unlock reminder
+// ---------------------------------------------------------------------------
+
+interface CalendarMenuProps {
+  unlockDate: Date;
+  title: string;
+  description: string;
+  engagementId: string;
+}
+
+function CalendarMenu({ unlockDate, title, description, engagementId }: CalendarMenuProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const detailUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/dashboard/engagements/${engagementId}`
+      : '';
+
+  const calEvent = {
+    title,
+    description,
+    startDate: unlockDate,
+    durationMinutes: 60,
+    url: detailUrl,
+  };
+
+  const handleDownload = () => {
+    downloadIcs(calEvent);
+    setOpen(false);
+  };
+
+  const handleGoogle = () => {
+    window.open(googleCalendarUrl(calEvent), '_blank', 'noopener,noreferrer');
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="btn-ghost text-xs flex items-center gap-1.5"
+        title="Add to calendar"
+      >
+        <CalendarPlus className="w-3.5 h-3.5" />
+        Add to calendar
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-20 w-48 rounded-xl bg-white border border-gray-100 shadow-lg py-1">
+          <button
+            onClick={handleDownload}
+            className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-gray-400" />
+            Download .ics file
+          </button>
+          <button
+            onClick={handleGoogle}
+            className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Chrome className="w-3.5 h-3.5 text-gray-400" />
+            Google Calendar
+          </button>
+        </div>
+      )}
     </div>
   );
 }

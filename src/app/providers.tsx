@@ -1,9 +1,20 @@
 'use client';
 import { useEffect } from 'react';
+import { Toaster } from 'sonner';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const rehydrate = useAuthStore((s) => s.rehydrate);
   useEffect(() => { rehydrate(); }, [rehydrate]);
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <Toaster
+        position="bottom-right"
+        richColors
+        closeButton
+        toastOptions={{ duration: 6000 }}
+      />
+    </>
+  );
 }
