@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, Info } from 'lucide-react';
 import Link from 'next/link';
+import { StrKey } from '@stellar/stellar-sdk';
 import { createEngagement } from '@/lib/stellar/contract';
 import { engagementsApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
@@ -17,6 +18,41 @@ const DEFAULT_MILESTONES: MilestoneInput[] = [
   { name: '30-Day Retention',  paymentPercent: 40, kind: 'RETENTION', retentionDays: 30 },
   { name: '90-Day Retention',  paymentPercent: 30, kind: 'RETENTION', retentionDays: 90 },
 ];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** True when s is a non-empty valid Ed25519 public key (G…). */
+function isValidStellarAddress(s: string): boolean {
+  return s.trim().length > 0 && StrKey.isValidEd25519PublicKey(s.trim());
+}
+
+/**
+ * Returns an error message when the amount string is invalid, otherwise null.
+ * Rules: must be a positive number with at most 7 decimal places.
+ */
+function amountError(value: string): string | null {
+  if (value.trim() === '') return 'Amount is required.';
+  const num = Number(value);
+  if (isNaN(num) || num <= 0) return 'Amount must be a positive number.';
+  // Check decimal places ≤ 7
+  const parts = value.split('.');
+  if (parts.length === 2 && parts[1].length > 7) {
+    return 'Amount may have at most 7 decimal places.';
+  }
+  return null;
+}
+
+/**
+ * Returns an error message when retentionDays is invalid, otherwise null.
+ * Must be a positive integer.
+ */
+function retentionDaysError(value: number | undefined): string | null {
+  if (value === undefined || value === null) return 'Retention days is required.';
+  if (!Number.isInteger(value) || value <= 0) return 'Must be a positive whole number.';
+  return null;
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function CreateEngagementPage() {
   const router = useRouter();
@@ -33,10 +69,76 @@ export default function CreateEngagementPage() {
   const [milestones, setMilestones]             = useState<MilestoneInput[]>(DEFAULT_MILESTONES);
   const [loading, setLoading]                   = useState(false);
   const [txStep, setTxStep]                     = useState('');
-  const [error, setError]                       = useState<string | null>(null);
+  const [submitError, setSubmitError]           = useState<string | null>(null);
 
-  const totalPercent = milestones.reduce((s, m) => s + m.paymentPercent, 0);
+  // ── Derived validation ───────────────────────────────────────────────────────
+
+  const recruiterError = useMemo<string | null>(() => {
+    if (recruiterAddress.trim() === '') return null; // empty = pristine, no error yet
+    if (!isValidStellarAddress(recruiterAddress)) return 'Not a valid Stellar public key (G…).';
+    return null;
+  }, [recruiterAddress]);
+
+  const arbiterError = useMemo<string | null>(() => {
+    if (arbiterAddress.trim() === '') return null;
+    if (!isValidStellarAddress(arbiterAddress)) return 'Not a valid Stellar public key (G…).';
+    return null;
+  }, [arbiterAddress]);
+
+  /** Uniqueness errors — only shown when the individual field is otherwise valid. */
+  const uniquenessErrors = useMemo<{ recruiter?: string; arbiter?: string }>(() => {
+    const errors: { recruiter?: string; arbiter?: string } = {};
+    const r = recruiterAddress.trim();
+    const ar = arbiterAddress.trim();
+    const co = address?.trim() ?? '';
+
+    if (r && isValidStellarAddress(r)) {
+      if (co && r === co) errors.recruiter = 'Recruiter address must differ from your company address.';
+      else if (ar && isValidStellarAddress(ar) && r === ar) errors.recruiter = 'Recruiter and arbiter addresses must be different.';
+    }
+    if (ar && isValidStellarAddress(ar)) {
+      if (co && ar === co) errors.arbiter = 'Arbiter address must differ from your company address.';
+    }
+    return errors;
+  }, [recruiterAddress, arbiterAddress, address]);
+
+  const amountErr = useMemo<string | null>(() => {
+    if (totalUsdc.trim() === '') return null; // pristine
+    return amountError(totalUsdc);
+  }, [totalUsdc]);
+
+  const totalPercent = milestones.reduce((s, m) => s + (Number(m.paymentPercent) || 0), 0);
   const percentValid = totalPercent === 100;
+
+  /** Per-milestone retentionDays errors, keyed by index. */
+  const milestoneRetentionErrors = useMemo<Record<number, string>>(() => {
+    const errs: Record<number, string> = {};
+    milestones.forEach((m, i) => {
+      if (m.kind === 'RETENTION') {
+        const err = retentionDaysError(m.retentionDays);
+        if (err) errs[i] = err;
+      }
+    });
+    return errs;
+  }, [milestones]);
+
+  /** True only when every required field passes all rules. */
+  const formIsValid = useMemo<boolean>(() => {
+    if (!jobTitle.trim()) return false;
+    if (!recruiterAddress.trim() || !isValidStellarAddress(recruiterAddress)) return false;
+    if (!arbiterAddress.trim() || !isValidStellarAddress(arbiterAddress)) return false;
+    if (Object.keys(uniquenessErrors).length > 0) return false;
+    if (amountError(totalUsdc) !== null) return false;
+    if (!percentValid) return false;
+    if (Object.keys(milestoneRetentionErrors).length > 0) return false;
+    return true;
+  }, [
+    jobTitle, recruiterAddress, arbiterAddress, uniquenessErrors,
+    totalUsdc, percentValid, milestoneRetentionErrors,
+  ]);
+
+  // ── Milestone helpers ────────────────────────────────────────────────────────
+
   const retentionDays = milestones
     .filter((m) => m.kind === 'RETENTION')
     .map((m) => m.retentionDays ?? 30);
@@ -50,10 +152,12 @@ export default function CreateEngagementPage() {
   const update = (i: number, field: keyof MilestoneInput, value: any) =>
     setMilestones(milestones.map((m, idx) => idx === i ? { ...m, [field]: value } : m));
 
+  // ── Submit ───────────────────────────────────────────────────────────────────
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!address) return;
-    setError(null);
+    if (!address || !formIsValid) return;
+    setSubmitError(null);
     setLoading(true);
 
     try {
@@ -89,12 +193,14 @@ export default function CreateEngagementPage() {
 
       router.push(`/dashboard/engagements/${engagementId}`);
     } catch (err: any) {
-      setError(err?.message ?? 'Transaction failed. Please try again.');
+      setSubmitError(err?.message ?? 'Transaction failed. Please try again.');
     } finally {
       setLoading(false);
       setTxStep('');
     }
   };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-2xl">
@@ -109,16 +215,16 @@ export default function CreateEngagementPage() {
         Lock the recruiter fee in a Soroban escrow contract. The fee releases automatically as milestones are confirmed.
       </p>
 
-      {error && (
+      {submitError && (
         <div className="mb-5 p-4 rounded-xl bg-red-50 border border-red-100 flex gap-3">
           <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700">{error}</p>
+          <p className="text-sm text-red-700">{submitError}</p>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
 
-        {/* Job details */}
+        {/* ── Job details ── */}
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Job details</h2>
           <div className="space-y-4">
@@ -128,11 +234,13 @@ export default function CreateEngagementPage() {
                 className="input bg-gray-50 text-gray-500 font-mono text-xs" />
               <p className="text-xs text-gray-400 mt-1">Auto-generated — unique on-chain identifier</p>
             </div>
+
             <div>
               <label className="label">Job title <span className="text-red-500">*</span></label>
               <input placeholder="e.g. Senior Software Engineer" value={jobTitle}
                 onChange={(e) => setJobTitle(e.target.value)} required className="input" />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Salary range</label>
@@ -145,22 +253,32 @@ export default function CreateEngagementPage() {
                   onChange={(e) => setLocation(e.target.value)} className="input" />
               </div>
             </div>
+
             <div>
               <label className="label">Description (optional)</label>
               <textarea placeholder="Role summary…" value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
                 rows={3} className="input resize-none" />
             </div>
+
             <div>
               <label className="label">Total recruiter fee (USDC) <span className="text-red-500">*</span></label>
-              <input type="number" min="0" step="0.01" placeholder="e.g. 10000"
-                value={totalUsdc} onChange={(e) => setTotalUsdc(e.target.value)}
-                required className="input" />
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="e.g. 10000"
+                value={totalUsdc}
+                onChange={(e) => setTotalUsdc(e.target.value)}
+                aria-invalid={amountErr !== null}
+                className={`input ${amountErr ? 'border-red-400 focus:ring-red-300' : ''}`}
+              />
+              {amountErr && <FieldError message={amountErr} />}
             </div>
           </div>
         </div>
 
-        {/* Parties */}
+        {/* ── Parties ── */}
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Parties</h2>
           <div className="space-y-4">
@@ -169,31 +287,50 @@ export default function CreateEngagementPage() {
               <input value={address ?? ''} readOnly
                 className="input bg-gray-50 text-gray-500 font-mono text-xs" />
             </div>
+
             <div>
               <label className="label">Recruiter Stellar address <span className="text-red-500">*</span></label>
-              <input placeholder="G..." value={recruiterAddress}
+              <input
+                placeholder="G..."
+                value={recruiterAddress}
                 onChange={(e) => setRecruiterAddress(e.target.value)}
-                required className="input font-mono text-xs" />
+                aria-invalid={!!(recruiterError || uniquenessErrors.recruiter)}
+                className={`input font-mono text-xs ${
+                  (recruiterError || uniquenessErrors.recruiter) ? 'border-red-400 focus:ring-red-300' : ''
+                }`}
+              />
+              {recruiterError    && <FieldError message={recruiterError} />}
+              {!recruiterError && uniquenessErrors.recruiter && <FieldError message={uniquenessErrors.recruiter} />}
             </div>
+
             <div>
               <label className="label">Arbiter Stellar address <span className="text-red-500">*</span></label>
-              <input placeholder="G..." value={arbiterAddress}
+              <input
+                placeholder="G..."
+                value={arbiterAddress}
                 onChange={(e) => setArbiterAddress(e.target.value)}
-                required className="input font-mono text-xs" />
+                aria-invalid={!!(arbiterError || uniquenessErrors.arbiter)}
+                className={`input font-mono text-xs ${
+                  (arbiterError || uniquenessErrors.arbiter) ? 'border-red-400 focus:ring-red-300' : ''
+                }`}
+              />
+              {arbiterError    && <FieldError message={arbiterError} />}
+              {!arbiterError && uniquenessErrors.arbiter && <FieldError message={uniquenessErrors.arbiter} />}
               <p className="text-xs text-gray-400 mt-1">Resolves disputes between company and recruiter.</p>
             </div>
           </div>
         </div>
 
-        {/* Milestones */}
+        {/* ── Milestones ── */}
         <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Fee milestones</h2>
               <p className="text-xs text-gray-400 mt-0.5">
                 Placement milestones unlock immediately. Retention milestones are time-locked.
               </p>
             </div>
+            {/* Running total badge */}
             <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
               percentValid ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
             }`}>
@@ -201,9 +338,21 @@ export default function CreateEngagementPage() {
             </span>
           </div>
 
-          <div className="space-y-3 mb-4">
+          {!percentValid && (
+            <FieldError
+              message={
+                totalPercent < 100
+                  ? `Percentages must add up to 100 — ${100 - totalPercent}% still unallocated.`
+                  : `Percentages must add up to 100 — currently ${totalPercent - 100}% over budget.`
+              }
+            />
+          )}
+
+          <div className="space-y-3 mb-4 mt-3">
             {milestones.map((m, i) => (
-              <div key={i} className="p-3 rounded-xl border border-gray-100 bg-gray-50">
+              <div key={i} className={`p-3 rounded-xl border bg-gray-50 ${
+                milestoneRetentionErrors[i] ? 'border-red-300' : 'border-gray-100'
+              }`}>
                 <div className="flex items-center gap-2 mb-2.5">
                   <div className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
                     m.kind === 'PLACEMENT' ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700'
@@ -213,38 +362,60 @@ export default function CreateEngagementPage() {
                   <select
                     value={m.kind}
                     onChange={(e) => update(i, 'kind', e.target.value as 'PLACEMENT' | 'RETENTION')}
-                    className="input py-1.5 w-auto text-xs"
+                    className="input py-1.5 w-auto text-xs min-h-[44px]"
                   >
                     <option value="PLACEMENT">Placement</option>
                     <option value="RETENTION">Retention</option>
                   </select>
                   {milestones.length > 1 && (
                     <button type="button" onClick={() => removeMilestone(i)}
-                      className="ml-auto p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                      className="ml-auto p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
+
                 <div className="flex items-center gap-2">
                   <input placeholder="Milestone name" value={m.name}
                     onChange={(e) => update(i, 'name', e.target.value)}
                     required className="input flex-1 text-xs" />
                   <div className="relative w-20">
-                    <input type="number" min="1" max="100" value={m.paymentPercent}
+                    <input
+                      type="number" min="1" max="100"
+                      value={m.paymentPercent}
                       onChange={(e) => update(i, 'paymentPercent', Number(e.target.value))}
-                      required className="input pr-6 text-xs" />
+                      required className="input pr-6 text-xs"
+                    />
                     <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
                   </div>
                   {m.kind === 'RETENTION' && (
                     <div className="relative w-24">
-                      <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
-                        onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
-                        required className="input pr-6 text-xs" />
+                      <input
+                        type="number" min="1"
+                        value={m.retentionDays ?? ''}
+                        placeholder="days"
+                        onChange={(e) => update(i, 'retentionDays', e.target.value === '' ? undefined : Number(e.target.value))}
+                        aria-invalid={!!milestoneRetentionErrors[i]}
+                        className={`input pr-6 text-xs ${milestoneRetentionErrors[i] ? 'border-red-400' : ''}`}
+                      />
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
                     </div>
-                  )}
+                    {m.kind === 'RETENTION' && (
+                      <div className="relative flex-1 sm:w-24 sm:flex-none">
+                        <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
+                          onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
+                          required className="input pr-6 text-xs w-full min-h-[44px]" />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {m.kind === 'RETENTION' && (
+
+                {m.kind === 'RETENTION' && milestoneRetentionErrors[i] && (
+                  <FieldError message={milestoneRetentionErrors[i]} />
+                )}
+
+                {m.kind === 'RETENTION' && !milestoneRetentionErrors[i] && (
                   <p className="text-[10px] text-amber-600 mt-1.5 flex items-center gap-1">
                     <Info className="w-3 h-3" />
                     Unlocks after {m.retentionDays ?? 30} days (~ledger {((m.retentionDays ?? 30) * 17280).toLocaleString()})
@@ -260,16 +431,20 @@ export default function CreateEngagementPage() {
           </button>
         </div>
 
-        {/* Submit */}
+        {/* ── Submit ── */}
         <div className="flex items-center gap-3">
-          <button type="submit" disabled={loading || !percentValid} className="btn-primary flex-1">
+          <button
+            type="submit"
+            disabled={loading || !formIsValid}
+            className="btn-primary flex-1"
+          >
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin" />{txStep || 'Processing…'}</>
             ) : (
               'Sign & lock fee in escrow'
             )}
           </button>
-          <Link href="/dashboard/engagements" className="btn-secondary">Cancel</Link>
+          <Link href="/dashboard/engagements" className="btn-secondary text-center min-h-[44px] flex items-center justify-center">Cancel</Link>
         </div>
 
         <p className="text-xs text-gray-400 text-center">
@@ -277,5 +452,16 @@ export default function CreateEngagementPage() {
         </p>
       </form>
     </div>
+  );
+}
+
+// ── Small helper component ─────────────────────────────────────────────────────
+
+function FieldError({ message }: { message: string }) {
+  return (
+    <p role="alert" className="mt-1 flex items-center gap-1 text-xs text-red-600">
+      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+      {message}
+    </p>
   );
 }

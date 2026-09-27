@@ -44,7 +44,9 @@ export const engagementsApi = {
   list: async (params?: {
     companyAddress?: string;
     recruiterAddress?: string;
+    arbiterAddress?: string;
     status?: string;
+    search?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<Engagement>> => {
@@ -110,6 +112,34 @@ export const notificationsApi = {
   },
   markAllRead: async (): Promise<void> => {
     await apiClient.patch('/notifications/read-all');
+  },
+};
+
+// ----------------------------------------------------------
+// IPFS upload (proxied through backend so the pinning key stays server-side)
+// ----------------------------------------------------------
+export const uploadApi = {
+  /**
+   * POST /upload/proof  — multipart/form-data, field name "file"
+   * Backend pins to the configured pinning service and returns { cid }.
+   * onProgress receives 0–100.
+   */
+  uploadProof: (
+    file: File,
+    onProgress?: (pct: number) => void,
+  ): Promise<{ cid: string }> => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient
+      .post<ApiResponse<{ cid: string }>>('/upload/proof', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (onProgress && e.total) {
+            onProgress(Math.round((e.loaded * 100) / e.total));
+          }
+        },
+      })
+      .then((res) => res.data.data);
   },
 };
 

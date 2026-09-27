@@ -40,6 +40,25 @@ export function timeAgo(date: string | null): string {
   return formatDistanceToNow(new Date(date), { addSuffix: true });
 }
 
+// ── Block explorer helpers ─────────────────────────────────────────────────────
+
+/** Stellar network slug used by stellar.expert */
+function explorerNetwork(): 'testnet' | 'public' {
+  return process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'public' : 'testnet';
+}
+
+/** Link to a transaction on stellar.expert */
+export function explorerTxUrl(txHash: string): string {
+  return `https://stellar.expert/explorer/${explorerNetwork()}/tx/${txHash}`;
+}
+
+/** Link to an account on stellar.expert */
+export function explorerAccountUrl(address: string): string {
+  return `https://stellar.expert/explorer/${explorerNetwork()}/account/${address}`;
+}
+
+// ── Engagement ID ─────────────────────────────────────────────────────────────
+
 /** Generate a unique engagement ID */
 export function generateEngagementId(): string {
   const date = format(new Date(), 'yyyyMMdd');
@@ -111,6 +130,37 @@ export function formatRetentionCountdown(daysRemaining: number): string {
   const days  = daysRemaining % 7;
   if (days === 0) return `${weeks}w remaining`;
   return `${weeks}w ${days}d remaining`;
+}
+
+/**
+ * Format a millisecond duration into a live countdown string.
+ *
+ * >= 48 h  → "Xd Yh remaining"   (coarse — caller uses static days fallback)
+ * <  48 h  → "Xd Yh Zm remaining"
+ * <   1 h  → "Ym Zs remaining"
+ * <= 0     → "Ready to unlock"
+ */
+export function formatLiveCountdown(ms: number): string {
+  if (ms <= 0) return 'Ready to unlock';
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+
+  if (ms >= 48 * 3600 * 1000) {
+    // Coarse — signal to caller to keep using static days label
+    return d > 0
+      ? `${d}d ${h}h remaining`
+      : `${h}h remaining`;
+  }
+  if (ms < 3600 * 1000) {
+    return `${m}m ${s}s remaining`;
+  }
+  return d > 0
+    ? `${d}d ${h}h ${m}m remaining`
+    : `${h}h ${m}m remaining`;
 }
 
 /** Return timer pill class based on days remaining */
