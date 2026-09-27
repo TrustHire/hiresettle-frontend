@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Briefcase, Bell, Activity, LogOut, ShieldCheck } from 'lucide-react';
+import { Briefcase, Bell, Activity, LogOut, ShieldCheck, Scale } from 'lucide-react';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { shortAddress, cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { href: '/dashboard/engagements', label: 'Engagements', icon: Briefcase },
+  { href: '/dashboard/disputes',    label: 'Disputes',     icon: Scale     },
   { href: '/notifications',         label: 'Notifications', icon: Bell },
   { href: '/dashboard/events',      label: 'Chain Events',  icon: Activity },
 ];
