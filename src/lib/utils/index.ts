@@ -40,6 +40,25 @@ export function timeAgo(date: string | null): string {
   return formatDistanceToNow(new Date(date), { addSuffix: true });
 }
 
+// ── Block explorer helpers ─────────────────────────────────────────────────────
+
+/** Stellar network slug used by stellar.expert */
+function explorerNetwork(): 'testnet' | 'public' {
+  return process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'public' : 'testnet';
+}
+
+/** Link to a transaction on stellar.expert */
+export function explorerTxUrl(txHash: string): string {
+  return `https://stellar.expert/explorer/${explorerNetwork()}/tx/${txHash}`;
+}
+
+/** Link to an account on stellar.expert */
+export function explorerAccountUrl(address: string): string {
+  return `https://stellar.expert/explorer/${explorerNetwork()}/account/${address}`;
+}
+
+// ── Engagement ID ─────────────────────────────────────────────────────────────
+
 /** Generate a unique engagement ID */
 export function generateEngagementId(): string {
   const date = format(new Date(), 'yyyyMMdd');

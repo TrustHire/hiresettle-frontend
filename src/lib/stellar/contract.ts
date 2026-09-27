@@ -23,6 +23,51 @@ const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID!;
 const NETWORK     = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
 const NETWORK_PASSPHRASE = NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
 
+// ----------------------------------------------------------
+// Transaction progress types (exported for UI consumers)
+// ----------------------------------------------------------
+
+/** The ordered steps of every Soroban transaction. */
+export type TxStepId =
+  | 'simulating'
+  | 'awaiting_signature'
+  | 'submitting'
+  | 'confirming'
+  | 'done';
+
+export type TxStepStatus = 'idle' | 'active' | 'done' | 'error';
+
+export interface TxStep {
+  id: TxStepId;
+  label: string;
+  status: TxStepStatus;
+}
+
+export interface TxStatusEvent {
+  /** Which step just changed. */
+  step: TxStepId;
+  /** New status for that step. */
+  status: TxStepStatus;
+  /** Set once the tx has been sent — used to build an explorer link. */
+  txHash?: string;
+  /** Set on error — the human-readable message. */
+  error?: string;
+}
+
+/** Callback signature callers pass to any contract write function. */
+export type OnStatusFn = (event: TxStatusEvent) => void;
+
+/** Returns the initial step list so the UI can render the skeleton immediately. */
+export function initialTxSteps(): TxStep[] {
+  return [
+    { id: 'simulating',         label: 'Simulating',        status: 'idle' },
+    { id: 'awaiting_signature', label: 'Awaiting signature', status: 'idle' },
+    { id: 'submitting',         label: 'Submitting',         status: 'idle' },
+    { id: 'confirming',         label: 'Confirming',         status: 'idle' },
+    { id: 'done',               label: 'Done',               status: 'idle' },
+  ];
+}
+
 let _rpc: SorobanRpc.Server;
 function getRpc() {
   if (!_rpc) _rpc = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
@@ -37,7 +82,12 @@ async function invokeContract(
   callerAddress: string,
   method: string,
   args: xdr.ScVal[],
+  onStatus?: OnStatusFn,
 ): Promise<string> {
+  const notify = (step: TxStepId, status: TxStepStatus, extra?: Pick<TxStatusEvent, 'txHash' | 'error'>) => {
+    onStatus?.({ step, status, ...extra });
+  };
+
   const rpc = getRpc();
   const contract = new Contract(CONTRACT_ID);
   const account = await rpc.getAccount(callerAddress);
@@ -50,36 +100,78 @@ async function invokeContract(
     .setTimeout(30)
     .build();
 
-  const simulation = await rpc.simulateTransaction(tx);
-  if (SorobanRpc.Api.isSimulationError(simulation)) {
-    throw new Error(`Simulation error: ${simulation.error}`);
+  // Step 1 — Simulate
+  notify('simulating', 'active');
+  let simulation: Awaited<ReturnType<typeof rpc.simulateTransaction>>;
+  try {
+    simulation = await rpc.simulateTransaction(tx);
+  } catch (err: any) {
+    notify('simulating', 'error', { error: err?.message ?? 'Simulation failed' });
+    throw err;
   }
+  if (SorobanRpc.Api.isSimulationError(simulation)) {
+    const msg = `Simulation error: ${simulation.error}`;
+    notify('simulating', 'error', { error: msg });
+    throw new Error(msg);
+  }
+  notify('simulating', 'done');
 
   const assembled = SorobanRpc.assembleTransaction(tx, simulation).build();
-  const signedXdr = await signTx(assembled.toXDR(), NETWORK_PASSPHRASE);
-  const { Transaction } = await import('@stellar/stellar-sdk');
-  const response = await rpc.sendTransaction(new Transaction(signedXdr));
 
-  if (response.status === 'ERROR') {
-    throw new Error(`Submission error: ${response.errorResult?.toXDR()}`);
+  // Step 2 — Awaiting Freighter signature
+  notify('awaiting_signature', 'active');
+  let signedXdr: string;
+  try {
+    signedXdr = await signTx(assembled.toXDR(), NETWORK_PASSPHRASE);
+  } catch (err: any) {
+    notify('awaiting_signature', 'error', { error: err?.message ?? 'Signature rejected' });
+    throw err;
   }
+  notify('awaiting_signature', 'done');
 
-  return waitForConfirmation(response.hash);
+  // Step 3 — Submit
+  notify('submitting', 'active');
+  const { Transaction } = await import('@stellar/stellar-sdk');
+  let response: Awaited<ReturnType<typeof rpc.sendTransaction>>;
+  try {
+    response = await rpc.sendTransaction(new Transaction(signedXdr));
+  } catch (err: any) {
+    notify('submitting', 'error', { error: err?.message ?? 'Submission failed' });
+    throw err;
+  }
+  if (response.status === 'ERROR') {
+    const msg = `Submission error: ${response.errorResult?.toXDR()}`;
+    notify('submitting', 'error', { error: msg });
+    throw new Error(msg);
+  }
+  notify('submitting', 'done', { txHash: response.hash });
+
+  // Steps 4 + 5 — Confirm + Done (delegated to waitForConfirmation)
+  return waitForConfirmation(response.hash, onStatus);
 }
 
-async function waitForConfirmation(txHash: string): Promise<string> {
+async function waitForConfirmation(txHash: string, onStatus?: OnStatusFn): Promise<string> {
   const rpc = getRpc();
+  onStatus?.({ step: 'confirming', status: 'active', txHash });
   let attempts = 0;
   while (attempts < 20) {
     await new Promise((r) => setTimeout(r, 2000));
     const result = await rpc.getTransaction(txHash);
-    if (result.status === SorobanRpc.Api.GetTransactionStatus.SUCCESS) return txHash;
+    if (result.status === SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
+      onStatus?.({ step: 'confirming', status: 'done', txHash });
+      onStatus?.({ step: 'done',       status: 'done', txHash });
+      return txHash;
+    }
     if (result.status === SorobanRpc.Api.GetTransactionStatus.FAILED) {
-      throw new Error(`Transaction failed: ${txHash}`);
+      const msg = `Transaction failed: ${txHash}`;
+      onStatus?.({ step: 'confirming', status: 'error', txHash, error: msg });
+      throw new Error(msg);
     }
     attempts++;
   }
-  throw new Error(`Transaction not confirmed after ${attempts} attempts: ${txHash}`);
+  const msg = `Transaction not confirmed after ${attempts} attempts: ${txHash}`;
+  onStatus?.({ step: 'confirming', status: 'error', txHash, error: msg });
+  throw new Error(msg);
 }
 
 async function simulateCall(method: string, args: xdr.ScVal[]): Promise<any> {
@@ -127,7 +219,7 @@ export interface CreateEngagementParams {
   retentionDays: number[]; // one per RETENTION milestone
 }
 
-export async function createEngagement(params: CreateEngagementParams): Promise<string> {
+export async function createEngagement(params: CreateEngagementParams, onStatus?: OnStatusFn): Promise<string> {
   const milestonesScVal = xdr.ScVal.scvVec(
     params.milestones.map((m) =>
       xdr.ScVal.scvMap([
@@ -175,7 +267,7 @@ export async function createEngagement(params: CreateEngagementParams): Promise<
     nativeToScVal(params.jobTitle, { type: 'string' }),
     milestonesScVal,
     retentionDaysScVal,
-  ]);
+  ], onStatus);
 }
 
 /** Unlock a Retention milestone after its time window has elapsed */
@@ -183,11 +275,11 @@ export async function unlockMilestone(params: {
   callerAddress: string;
   engagementId: string;
   milestoneIndex: number;
-}): Promise<string> {
+}, onStatus?: OnStatusFn): Promise<string> {
   return invokeContract(params.callerAddress, 'unlock_milestone', [
     nativeToScVal(params.engagementId, { type: 'string' }),
     nativeToScVal(params.milestoneIndex, { type: 'u32' }),
-  ]);
+  ], onStatus);
 }
 
 /** Recruiter submits an IPFS proof hash for a milestone */
@@ -196,13 +288,13 @@ export async function submitProof(params: {
   engagementId: string;
   milestoneIndex: number;
   proofHash: string;
-}): Promise<string> {
+}, onStatus?: OnStatusFn): Promise<string> {
   return invokeContract(params.callerAddress, 'submit_proof', [
     new Address(params.callerAddress).toScVal(),
     nativeToScVal(params.engagementId, { type: 'string' }),
     nativeToScVal(params.milestoneIndex, { type: 'u32' }),
     nativeToScVal(params.proofHash, { type: 'string' }),
-  ]);
+  ], onStatus);
 }
 
 /** Company confirms a ProofSubmitted milestone — releases payment */
@@ -210,12 +302,12 @@ export async function confirmMilestone(params: {
   callerAddress: string;
   engagementId: string;
   milestoneIndex: number;
-}): Promise<string> {
+}, onStatus?: OnStatusFn): Promise<string> {
   return invokeContract(params.callerAddress, 'confirm_milestone', [
     new Address(params.callerAddress).toScVal(),
     nativeToScVal(params.engagementId, { type: 'string' }),
     nativeToScVal(params.milestoneIndex, { type: 'u32' }),
-  ]);
+  ], onStatus);
 }
 
 /** Company raises a dispute on a ProofSubmitted milestone */
@@ -223,12 +315,12 @@ export async function raiseDispute(params: {
   callerAddress: string;
   engagementId: string;
   milestoneIndex: number;
-}): Promise<string> {
+}, onStatus?: OnStatusFn): Promise<string> {
   return invokeContract(params.callerAddress, 'raise_dispute', [
     new Address(params.callerAddress).toScVal(),
     nativeToScVal(params.engagementId, { type: 'string' }),
     nativeToScVal(params.milestoneIndex, { type: 'u32' }),
-  ]);
+  ], onStatus);
 }
 
 /** Arbiter resolves a disputed milestone */
@@ -237,35 +329,35 @@ export async function resolveDispute(params: {
   engagementId: string;
   milestoneIndex: number;
   approve: boolean;
-}): Promise<string> {
+}, onStatus?: OnStatusFn): Promise<string> {
   return invokeContract(params.callerAddress, 'resolve_dispute', [
     new Address(params.callerAddress).toScVal(),
     nativeToScVal(params.engagementId, { type: 'string' }),
     nativeToScVal(params.milestoneIndex, { type: 'u32' }),
     nativeToScVal(params.approve, { type: 'bool' }),
-  ]);
+  ], onStatus);
 }
 
 /** Company requests a replacement after a candidate leaves */
 export async function requestReplacement(params: {
   callerAddress: string;
   engagementId: string;
-}): Promise<string> {
+}, onStatus?: OnStatusFn): Promise<string> {
   return invokeContract(params.callerAddress, 'request_replacement', [
     new Address(params.callerAddress).toScVal(),
     nativeToScVal(params.engagementId, { type: 'string' }),
-  ]);
+  ], onStatus);
 }
 
 /** Company cancels an engagement before placement is confirmed */
 export async function cancelEngagement(params: {
   callerAddress: string;
   engagementId: string;
-}): Promise<string> {
+}, onStatus?: OnStatusFn): Promise<string> {
   return invokeContract(params.callerAddress, 'cancel_engagement', [
     new Address(params.callerAddress).toScVal(),
     nativeToScVal(params.engagementId, { type: 'string' }),
-  ]);
+  ], onStatus);
 }
 
 // ----------------------------------------------------------
