@@ -91,6 +91,11 @@ export const milestonesApi = {
     );
     return data.data;
   },
+
+  /** Store the off-chain written reason for a raised dispute */
+  submitDisputeReason: async (engagementId: string, index: number, reason: string): Promise<void> => {
+    await apiClient.post(`/engagements/${engagementId}/milestones/${index}/dispute-reason`, { reason });
+  },
 };
 
 // ----------------------------------------------------------

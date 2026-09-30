@@ -293,6 +293,8 @@ function MilestoneRow({
   const [proofInput, setProofInput]         = useState('');
   const [showProofInput, setShowProofInput] = useState(false);
   const [timer, setTimer]                   = useState<RetentionTimer | null>(null);
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputeReason, setDisputeReason]       = useState('');
 
   // tx progress modal
   const { state: txState, open: openTx, reset: resetTx, onStatus } = useTxProgress();
@@ -429,6 +431,15 @@ function MilestoneRow({
               </div>
             )}
 
+            {/* Dispute reason (visible to arbiter and recruiter) */}
+            {milestone.status === 'Disputed' && milestone.disputeReason
+              && (userRole === 'arbiter' || userRole === 'recruiter') && (
+              <div className="mb-2 rounded-md border border-red-100 bg-red-50 p-2">
+                <p className="text-xs font-medium text-red-700 mb-0.5">Dispute reason</p>
+                <p className="text-xs text-red-800 whitespace-pre-wrap">{milestone.disputeReason}</p>
+              </div>
+            )}
+
             {/* Payment released */}
             {milestone.paymentReleased && (
               <p className="text-xs text-green-600 font-medium mb-2">
@@ -528,11 +539,7 @@ function MilestoneRow({
                   )}
                   {canDispute && (
                     <button
-                      onClick={() => wrap(() => raiseDispute({
-                        callerAddress: address!,
-                        engagementId: engagement.id,
-                        milestoneIndex: milestone.milestoneIndex,
-                      }, onStatus))}
+                      onClick={() => setShowDisputeModal(true)}
                       className="btn-danger text-xs"
                     >
                       <XCircle className="w-3.5 h-3.5" />
@@ -575,9 +582,62 @@ function MilestoneRow({
           </div>
         </div>
       </div>
+
+      {showDisputeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Dispute milestone</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Explain why you are disputing &ldquo;{milestone.name}&rdquo;. The arbiter and recruiter will see this.
+            </p>
+            <textarea
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              rows={4}
+              required
+              minLength={MIN_DISPUTE_REASON}
+              placeholder="Describe the issue with the submitted proof…"
+              className="input w-full text-xs"
+            />
+            <p className={cn(
+              'text-xs mt-1',
+              disputeReason.trim().length < MIN_DISPUTE_REASON ? 'text-gray-400' : 'text-green-600',
+            )}>
+              {disputeReason.trim().length}/{MIN_DISPUTE_REASON} characters minimum
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowDisputeModal(false)} className="btn-ghost text-xs">
+                Cancel
+              </button>
+              <button
+                disabled={disputeReason.trim().length < MIN_DISPUTE_REASON}
+                onClick={() => {
+                  const reason = disputeReason.trim();
+                  setShowDisputeModal(false);
+                  wrap(async () => {
+                    await raiseDispute({
+                      callerAddress: address!,
+                      engagementId: engagement.id,
+                      milestoneIndex: milestone.milestoneIndex,
+                    }, onStatus);
+                    await milestonesApi.submitDisputeReason(engagement.id, milestone.milestoneIndex, reason);
+                    setDisputeReason('');
+                  });
+                }}
+                className="btn-danger text-xs disabled:opacity-50"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Raise dispute
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
+
+const MIN_DISPUTE_REASON = 20;
 
 // ---------------------------------------------------------------------------
 // CalendarMenu — dropdown for adding a retention unlock reminder
