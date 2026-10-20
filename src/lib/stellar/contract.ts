@@ -35,7 +35,7 @@ export type TxStepId =
   | 'confirming'
   | 'done';
 
-export type TxStepStatus = 'idle' | 'active' | 'done' | 'error';
+export type TxStepStatus = 'idle' | 'active' | 'done' | 'error' | 'pending';
 
 export interface TxStep {
   id: TxStepId;
@@ -150,28 +150,61 @@ async function invokeContract(
   return waitForConfirmation(response.hash, onStatus);
 }
 
-async function waitForConfirmation(txHash: string, onStatus?: OnStatusFn): Promise<string> {
+export class TransactionPendingError extends Error {
+  txHash: string;
+  constructor(txHash: string) {
+    super(`Transaction is still pending confirmation: ${txHash}`);
+    this.name = 'TransactionPendingError';
+    this.txHash = txHash;
+  }
+}
+
+/**
+ * Polls for transaction confirmation using backoff with a ~2 minute total timeout.
+ * If the transaction does not confirm within the timeout, it emits a 'pending'
+ * status event instead of an error, allowing the user to view the explorer link
+ * or resume checking without double-submitting.
+ */
+export async function waitForConfirmation(
+  txHash: string,
+  onStatus?: OnStatusFn,
+  totalTimeoutMs = 120_000,
+): Promise<string> {
   const rpc = getRpc();
   onStatus?.({ step: 'confirming', status: 'active', txHash });
-  let attempts = 0;
-  while (attempts < 20) {
-    await new Promise((r) => setTimeout(r, 2000));
-    const result = await rpc.getTransaction(txHash);
-    if (result.status === SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
-      onStatus?.({ step: 'confirming', status: 'done', txHash });
-      onStatus?.({ step: 'done',       status: 'done', txHash });
-      return txHash;
+
+  const startTime = Date.now();
+  let delay = 2000;
+  const maxDelay = 6000;
+
+  while (Date.now() - startTime < totalTimeoutMs) {
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(Math.round(delay * 1.5), maxDelay);
+
+    try {
+      const result = await rpc.getTransaction(txHash);
+      if (result.status === SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
+        onStatus?.({ step: 'confirming', status: 'done', txHash });
+        onStatus?.({ step: 'done',       status: 'done', txHash });
+        return txHash;
+      }
+      if (result.status === SorobanRpc.Api.GetTransactionStatus.FAILED) {
+        const msg = `Transaction failed: ${txHash}`;
+        onStatus?.({ step: 'confirming', status: 'error', txHash, error: msg });
+        throw new Error(msg);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith('Transaction failed:')) {
+        throw err;
+      }
+      // Non-fatal network/rpc hiccup while polling: keep polling
+      console.warn('Transient error polling tx status:', err);
     }
-    if (result.status === SorobanRpc.Api.GetTransactionStatus.FAILED) {
-      const msg = `Transaction failed: ${txHash}`;
-      onStatus?.({ step: 'confirming', status: 'error', txHash, error: msg });
-      throw new Error(msg);
-    }
-    attempts++;
   }
-  const msg = `Transaction not confirmed after ${attempts} attempts: ${txHash}`;
-  onStatus?.({ step: 'confirming', status: 'error', txHash, error: msg });
-  throw new Error(msg);
+
+  // Timeout reached (~2 minutes) - mark as pending instead of throwing a generic failure
+  onStatus?.({ step: 'confirming', status: 'pending', txHash });
+  throw new TransactionPendingError(txHash);
 }
 
 async function simulateCall(method: string, args: xdr.ScVal[]): Promise<any> {

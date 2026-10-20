@@ -297,7 +297,7 @@ function MilestoneRow({
   const [disputeReason, setDisputeReason]       = useState('');
 
   // tx progress modal
-  const { state: txState, open: openTx, reset: resetTx, onStatus } = useTxProgress();
+  const { state: txState, open: openTx, reset: resetTx, onStatus, resumeCheck } = useTxProgress();
 
   // Store the last action so Retry can replay it
   const retryFnRef = useRef<(() => Promise<void>) | null>(null);
@@ -361,6 +361,13 @@ function MilestoneRow({
     if (retryFnRef.current) wrap(retryFnRef.current);
   }, [wrap]);
 
+  const handleResume = useCallback(async (hash: string) => {
+    const res = await resumeCheck(hash);
+    if (res) {
+      await onUpdate();
+    }
+  }, [resumeCheck, onUpdate]);
+
   const canUnlock      = isActive && milestone.kind === 'Retention'
     && milestone.status === 'Locked' && timer?.unlockable;
   const canSubmitProof = isActive && milestone.status === 'Pending' && userRole === 'recruiter';
@@ -375,6 +382,7 @@ function MilestoneRow({
         {...txState}
         onClose={resetTx}
         onRetry={handleRetry}
+        onResumeCheck={handleResume}
       />
 
       <div className="p-5">
