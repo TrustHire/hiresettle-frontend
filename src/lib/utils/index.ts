@@ -3,6 +3,8 @@ import { twMerge } from 'tailwind-merge';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { MilestoneStatus, EngagementStatus } from '@/types';
 
+export const LEDGERS_PER_DAY = Number(process.env.NEXT_PUBLIC_LEDGERS_PER_DAY) || 17280;
+
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 
 /** Shorten a Stellar address: GABC...XYZ */

@@ -8,7 +8,7 @@ import { StrKey } from '@stellar/stellar-sdk';
 import { createEngagement } from '@/lib/stellar/contract';
 import { engagementsApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
-import { generateEngagementId, usdcToStroops } from '@/lib/utils';
+import { generateEngagementId, LEDGERS_PER_DAY, usdcToStroops } from '@/lib/utils';
 import type { MilestoneInput } from '@/types';
 
 const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS!;
@@ -418,7 +418,7 @@ export default function CreateEngagementPage() {
                 {m.kind === 'RETENTION' && !milestoneRetentionErrors[i] && (
                   <p className="text-[10px] text-amber-600 mt-1.5 flex items-center gap-1">
                     <Info className="w-3 h-3" />
-                    Unlocks after {m.retentionDays ?? 30} days (~ledger {((m.retentionDays ?? 30) * 17280).toLocaleString()})
+                    Unlocks after {m.retentionDays ?? 30} days (~ledger {((m.retentionDays ?? 30) * LEDGERS_PER_DAY).toLocaleString()})
                   </p>
                 )}
               </div>
