@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { href: '/dashboard',             label: 'Overview',      icon: LayoutDashboard },
   { href: '/dashboard/engagements', label: 'Engagements', icon: Briefcase },
   { href: '/dashboard/disputes',    label: 'Disputes',     icon: Scale     },
-  { href: '/notifications',         label: 'Notifications', icon: Bell },
+  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
   { href: '/dashboard/events',      label: 'Chain Events',  icon: Activity },
 ];
 

@@ -127,7 +127,7 @@ export function TopBar() {
           </span>
 
           <Link
-            href="/notifications"
+            href="/dashboard/notifications"
             className="relative p-2 rounded-xl text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors"
             aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
           >
