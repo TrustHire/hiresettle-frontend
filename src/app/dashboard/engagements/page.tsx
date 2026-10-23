@@ -38,7 +38,7 @@ export default function EngagementsPage() {
 function EngagementsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { address } = useAuthStore();
+  const { address, isHydrated } = useAuthStore();
 
   // Initialise all filter state from URL so views are shareable / survive refresh
   const initialSearch = searchParams.get('q') ?? '';
@@ -118,7 +118,11 @@ function EngagementsContent() {
 
   // --- Data fetch ---
   useEffect(() => {
-    if (!address) return;
+    if (!isHydrated) return;
+    if (!address) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
     const roleFilter =
@@ -141,7 +145,7 @@ function EngagementsContent() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [address, committedSearch, statusFilter, viewAs, page]);
+  }, [address, isHydrated, committedSearch, statusFilter, viewAs, page]);
 
   const isSearching = committedSearch.trim().length > 0;
 

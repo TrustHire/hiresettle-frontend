@@ -14,12 +14,18 @@ interface DisputeRow {
 }
 
 export default function DisputesPage() {
-  const { address } = useAuthStore();
+  const { address, isHydrated } = useAuthStore();
   const [rows,    setRows]    = useState<DisputeRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!address) return;
+    // Wait until the auth store has finished rehydrating before deciding
+    // whether to fetch or show an empty/logged-out state.
+    if (!isHydrated) return;
+    if (!address) {
+      setLoading(false);
+      return;
+    }
 
     // Fetch all engagements where the user is arbiter.
     // We request a high limit so we get them all in one shot; the dispute queue
@@ -45,7 +51,7 @@ export default function DisputesPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [address]);
+  }, [address, isHydrated]);
 
   return (
     <div>
