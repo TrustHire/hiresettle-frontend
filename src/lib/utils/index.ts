@@ -27,8 +27,22 @@ export function stroopsToUsdc(stroops: string | bigint, decimals = 2): string {
 
 /** Convert human-readable USDC to stroops bigint */
 export function usdcToStroops(usdc: string): bigint {
+  if (usdc.length === 0) {
+    throw new Error('USDC amount cannot be empty.');
+  }
+  if (usdc.startsWith('-')) {
+    throw new Error('USDC amount must not be negative.');
+  }
+  if (!/^\d+(?:\.\d*)?$/.test(usdc)) {
+    throw new Error('USDC amount must be a valid decimal number.');
+  }
+
   const [whole, fraction = ''] = usdc.split('.');
-  const padded = fraction.padEnd(7, '0').slice(0, 7);
+  if (fraction.length > 7) {
+    throw new Error('USDC amount cannot have more than 7 decimal places.');
+  }
+
+  const padded = fraction.padEnd(7, '0');
   return BigInt(whole) * 10_000_000n + BigInt(padded);
 }
 
