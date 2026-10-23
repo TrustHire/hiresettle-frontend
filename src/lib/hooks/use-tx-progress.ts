@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { initialTxSteps } from '@/lib/stellar/contract';
+import { initialTxSteps, waitForConfirmation } from '@/lib/stellar/contract';
 import type { TxStep, TxStepId, TxStepStatus, TxStatusEvent, OnStatusFn } from '@/lib/stellar/contract';
 
 export interface TxProgressState {
@@ -62,15 +62,52 @@ export function useTxProgress() {
         return { ...s, status: event.status };
       });
 
+      const isError = event.status === 'error';
+      const isPending = event.status === 'pending';
+
       return {
         isOpen,
         steps,
         txHash: event.txHash ?? prev.txHash,
-        error: event.status === 'error' ? (event.error ?? 'Unknown error') : prev.error,
-        failedStep: event.status === 'error' ? event.step : prev.failedStep,
+        error: isError ? (event.error ?? 'Unknown error') : isPending ? null : prev.error,
+        failedStep: isError ? event.step : isPending ? null : prev.failedStep,
       };
     });
   }, []);
 
-  return { state, open, reset, onStatus };
+  /**
+   * Resume checking confirmation of a known transaction hash.
+   * Can be called with a specific txHash or falls back to state.txHash.
+   */
+  const resumeCheck = useCallback(
+    async (knownTxHash?: string): Promise<string | null> => {
+      const hash = knownTxHash ?? state.txHash;
+      if (!hash) return null;
+
+      setState({
+        isOpen: true,
+        steps: [
+          { id: 'simulating',         label: 'Simulating',         status: 'done' },
+          { id: 'awaiting_signature', label: 'Awaiting signature', status: 'done' },
+          { id: 'submitting',         label: 'Submitting',         status: 'done' },
+          { id: 'confirming',         label: 'Confirming',         status: 'active' },
+          { id: 'done',               label: 'Done',               status: 'idle' },
+        ],
+        txHash: hash,
+        error: null,
+        failedStep: null,
+      });
+
+      try {
+        const res = await waitForConfirmation(hash, onStatus);
+        return res;
+      } catch (err: unknown) {
+        console.warn('Resume check error:', err);
+        return null;
+      }
+    },
+    [state.txHash, onStatus],
+  );
+
+  return { state, open, reset, onStatus, resumeCheck };
 }

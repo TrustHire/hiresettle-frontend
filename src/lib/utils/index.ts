@@ -78,7 +78,22 @@ export function explorerAccountUrl(address: string): string {
 /** Generate a unique engagement ID */
 export function generateEngagementId(): string {
   const date = format(new Date(), 'yyyyMMdd');
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  let rand = '';
+
+  if (typeof crypto !== 'undefined') {
+    if (typeof crypto.randomUUID === 'function') {
+      rand = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
+    } else if (typeof crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(4);
+      crypto.getRandomValues(bytes);
+      rand = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    }
+  }
+
+  if (!rand) {
+    rand = Math.random().toString(36).slice(2, 10).toUpperCase();
+  }
+
   return `ENG-${date}-${rand}`;
 }
 

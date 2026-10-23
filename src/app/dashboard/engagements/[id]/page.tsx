@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
+import axios from 'axios';
 import { engagementsApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { MilestoneTimeline } from '@/components/milestones/MilestoneTimeline';
@@ -14,6 +15,7 @@ import { ChainEventFeed } from '@/components/engagements/ChainEventFeed';
 import {
   engagementStatusBadge, engagementStatusLabel, timeAgo,
 } from '@/lib/utils';
+import { toReadableError } from '@/lib/utils/toast-error';
 import type { Engagement } from '@/types';
 
 export default function EngagementDetailPage() {
@@ -22,21 +24,43 @@ export default function EngagementDetailPage() {
   const [engagement, setEngagement] = useState<Engagement | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    setError(null);
+    setNotFound(false);
     try {
       const data = await engagementsApi.get(id);
       setEngagement(data);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e: unknown) {
+      console.error(e);
+      const is404 =
+        (axios.isAxiosError(e) && e.response?.status === 404) ||
+        (e as { response?: { status?: number } })?.response?.status === 404 ||
+        (e as { status?: number })?.status === 404;
+
+      if (is404) {
+        setNotFound(true);
+      } else {
+        setError(toReadableError(e));
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [id]);
 
   const handleSync = async () => {
     setSyncing(true);
-    try { await engagementsApi.sync(id); await load(); }
-    finally { setSyncing(false); }
+    try {
+      await engagementsApi.sync(id);
+      await load(false);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   if (loading) return (
@@ -45,12 +69,43 @@ export default function EngagementDetailPage() {
     </div>
   );
 
-  if (!engagement) return (
+  if (notFound) return (
     <div className="text-center py-16">
       <p className="text-gray-500">Engagement not found.</p>
       <Link href="/dashboard/engagements" className="btn-secondary mt-4 inline-flex">
         Back to engagements
       </Link>
+    </div>
+  );
+
+  if (error || !engagement) return (
+    <div>
+      <Link
+        href="/dashboard/engagements"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-5 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        All engagements
+      </Link>
+      <div className="card p-12 text-center max-w-lg mx-auto">
+        <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+        <h2 className="text-base font-semibold text-gray-900 mb-1">Failed to load engagement</h2>
+        <p className="text-sm text-gray-500 mb-6">
+          {error || 'An unexpected error occurred while loading this engagement.'}
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => load()}
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </button>
+          <Link href="/dashboard/engagements" className="btn-secondary inline-flex">
+            Back to engagements
+          </Link>
+        </div>
+      </div>
     </div>
   );
 
