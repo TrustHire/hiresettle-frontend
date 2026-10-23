@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { usdcToStroops } from './index';
+import { timerPillClass, usdcToStroops } from './index';
 
 describe('usdcToStroops', () => {
   it('converts USDC amounts to stroops without losing precision', () => {
@@ -22,5 +22,21 @@ describe('usdcToStroops', () => {
     expect(() => usdcToStroops('0.00000001')).toThrow(
       /cannot have more than 7 decimal places/i,
     );
+  });
+});
+
+describe('timerPillClass', () => {
+  it('returns the approaching class for non-unlockable timers with three days or less remaining', () => {
+    expect(timerPillClass(3, false)).toBe('timer-approaching');
+    expect(timerPillClass(1, false)).toBe('timer-approaching');
+  });
+
+  it('returns the active class for timers with more than three days remaining', () => {
+    expect(timerPillClass(4, false)).toBe('timer-active');
+  });
+
+  it('returns the ready class when unlockable or the countdown has elapsed', () => {
+    expect(timerPillClass(3, true)).toBe('timer-ready');
+    expect(timerPillClass(0, false)).toBe('timer-ready');
   });
 });

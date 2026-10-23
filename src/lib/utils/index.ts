@@ -182,6 +182,6 @@ export function formatLiveCountdown(ms: number): string {
 /** Return timer pill class based on days remaining */
 export function timerPillClass(daysRemaining: number, unlockable: boolean): string {
   if (unlockable || daysRemaining <= 0) return 'timer-ready';
-  if (daysRemaining <= 3) return 'timer-active';
+  if (daysRemaining <= 3) return 'timer-approaching';
   return 'timer-active';
 }

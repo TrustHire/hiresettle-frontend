@@ -48,6 +48,7 @@
   .timer-pill {
     @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg;
   }
+  .timer-approaching { @apply timer-pill bg-amber-50 text-amber-700; }
   .timer-active  { @apply timer-pill bg-amber-50 text-amber-700; }
   .timer-ready   { @apply timer-pill bg-green-50 text-green-700; }
   .timer-done    { @apply timer-pill bg-gray-100 text-gray-500; }
