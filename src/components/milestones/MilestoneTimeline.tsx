@@ -18,7 +18,7 @@ import {
   milestoneStatusBadge, milestoneStatusLabel,
   stroopsToUsdc, cn, formatRetentionCountdown, formatLiveCountdown, timerPillClass,
 } from '@/lib/utils';
-import { toast } from 'sonner';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { toReadableError } from '@/lib/utils/toast-error';
 import { downloadIcs, googleCalendarUrl } from '@/lib/utils/calendar';
 import type { Engagement, Milestone, MilestoneStatus, RetentionTimer } from '@/types';
@@ -433,9 +433,10 @@ function MilestoneRow({
                   rel="noreferrer"
                   className="text-xs text-brand-600 hover:underline font-mono truncate max-w-xs flex items-center gap-1"
                 >
-                  {milestone.proofHash}
-                  <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                </a>
+                   {milestone.proofHash}
+                   <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                 </a>
+                 <CopyButton value={milestone.proofHash} label="proof hash" />
               </div>
             )}
 

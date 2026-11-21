@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Copy, Check, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import { CopyButton } from '@/components/ui/CopyButton';
 import {
   shortAddress,
-  copyToClipboard,
   formatDate,
   explorerTxUrl,
   explorerAccountUrl,
@@ -12,30 +11,6 @@ import {
 import type { Engagement } from '@/types';
 
 // ── Small reusable pieces ──────────────────────────────────────────────────────
-
-/** Copy-to-clipboard button with a brief checkmark feedback tick. */
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await copyToClipboard(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <button
-      onClick={handleCopy}
-      title="Copy to clipboard"
-      aria-label="Copy to clipboard"
-      className="text-gray-300 hover:text-gray-600 flex-shrink-0 transition-colors"
-    >
-      {copied
-        ? <Check className="w-3 h-3 text-green-500" />
-        : <Copy className="w-3 h-3" />}
-    </button>
-  );
-}
 
 /** Shortened address with copy button and explorer link. */
 function AddressCell({ value }: { value: string }) {

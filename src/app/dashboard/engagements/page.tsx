@@ -13,6 +13,16 @@ import type { Engagement, EngagementStatus } from '@/types';
 const DEBOUNCE_MS = 300;
 const PAGE_SIZE = 10;
 
+type SortOption = 'newest' | 'oldest' | 'amount_desc' | 'amount_asc' | 'status';
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'amount_desc', label: 'Highest amount' },
+  { value: 'amount_asc', label: 'Lowest amount' },
+  { value: 'status', label: 'Status' },
+];
+
 type ViewAs = 'company' | 'recruiter' | 'arbiter';
 
 export default function EngagementsPage() {
@@ -45,12 +55,14 @@ function EngagementsContent() {
   const initialStatus = (searchParams.get('status') ?? '') as EngagementStatus | '';
   const initialViewAs = (searchParams.get('viewAs') ?? 'company') as ViewAs;
   const initialPage = Math.max(1, Number(searchParams.get('page') ?? '1'));
+  const initialSort = (searchParams.get('sort') ?? 'newest') as SortOption;
 
   const [inputValue, setInputValue] = useState(initialSearch);
   const [committedSearch, setCommittedSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState<EngagementStatus | ''>(initialStatus);
   const [viewAs, setViewAs] = useState<ViewAs>(initialViewAs);
   const [page, setPage] = useState(initialPage);
+  const [sort, setSort] = useState<SortOption>(initialSort);
 
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [total, setTotal] = useState(0);
@@ -61,12 +73,13 @@ function EngagementsContent() {
 
   // --- URL sync helper ---
   const pushParams = useCallback(
-    (q: string, status: EngagementStatus | '', role: ViewAs, p: number) => {
+    (q: string, status: EngagementStatus | '', role: ViewAs, p: number, s: SortOption) => {
       const params = new URLSearchParams();
       if (q) params.set('q', q);
       if (status) params.set('status', status);
       if (role !== 'company') params.set('viewAs', role);
       if (p > 1) params.set('page', String(p));
+      if (s !== 'newest') params.set('sort', s);
       const qs = params.toString();
       router.replace(qs ? `?${qs}` : '?', { scroll: false });
     },
@@ -80,7 +93,7 @@ function EngagementsContent() {
     debounceRef.current = setTimeout(() => {
       setCommittedSearch(value);
       setPage(1);
-      pushParams(value, statusFilter, viewAs, 1);
+      pushParams(value, statusFilter, viewAs, 1, sort);
     }, DEBOUNCE_MS);
   };
 
@@ -89,26 +102,32 @@ function EngagementsContent() {
     setInputValue('');
     setCommittedSearch('');
     setPage(1);
-    pushParams('', statusFilter, viewAs, 1);
+    pushParams('', statusFilter, viewAs, 1, sort);
   };
 
   // --- Filter changes — always reset to page 1 ---
   const handleStatusChange = (value: EngagementStatus | '') => {
     setStatusFilter(value);
     setPage(1);
-    pushParams(committedSearch, value, viewAs, 1);
+    pushParams(committedSearch, value, viewAs, 1, sort);
   };
 
   const handleViewAsChange = (role: ViewAs) => {
     setViewAs(role);
     setPage(1);
-    pushParams(committedSearch, statusFilter, role, 1);
+    pushParams(committedSearch, statusFilter, role, 1, sort);
+  };
+
+  const handleSortChange = (value: SortOption) => {
+    setSort(value);
+    setPage(1);
+    pushParams(committedSearch, statusFilter, viewAs, 1, value);
   };
 
   // --- Pagination ---
   const goToPage = (p: number) => {
     setPage(p);
-    pushParams(committedSearch, statusFilter, viewAs, p);
+    pushParams(committedSearch, statusFilter, viewAs, p, sort);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -137,6 +156,7 @@ function EngagementsContent() {
         search: committedSearch || undefined,
         page,
         limit: PAGE_SIZE,
+        sort,
       })
       .then((res) => {
         setEngagements(res.data);
@@ -145,7 +165,7 @@ function EngagementsContent() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [address, isHydrated, committedSearch, statusFilter, viewAs, page]);
+   }, [address, isHydrated, committedSearch, statusFilter, viewAs, page, sort]);
 
   const isSearching = committedSearch.trim().length > 0;
 
@@ -219,6 +239,17 @@ function EngagementsContent() {
           <option value="Completed">Completed</option>
           <option value="ReplacementRequested">Replacement requested</option>
           <option value="Cancelled">Cancelled</option>
+        </select>
+
+        {/* Sort */}
+        <select
+          value={sort}
+          onChange={(e) => handleSortChange(e.target.value as SortOption)}
+          className="input w-auto"
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
         </select>
       </div>
 

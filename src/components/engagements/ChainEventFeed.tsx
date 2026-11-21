@@ -1,32 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { ExternalLink, Copy, Check, Activity } from 'lucide-react';
-import { explorerTxUrl, shortAddress, copyToClipboard, timeAgo } from '@/lib/utils';
+import { ExternalLink, Activity } from 'lucide-react';
+import { CopyButton } from '@/components/ui/CopyButton';
+import { explorerTxUrl, shortAddress, timeAgo } from '@/lib/utils';
 import type { ChainEvent } from '@/types';
-
-// ── Copy button ────────────────────────────────────────────────────────────────
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  const handle = async () => {
-    await copyToClipboard(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-  return (
-    <button
-      onClick={handle}
-      title="Copy tx hash"
-      aria-label="Copy tx hash"
-      className="text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0"
-    >
-      {copied
-        ? <Check className="w-3 h-3 text-green-500" />
-        : <Copy className="w-3 h-3" />}
-    </button>
-  );
-}
 
 // ── Human-readable event name ─────────────────────────────────────────────────
 

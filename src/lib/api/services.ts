@@ -47,6 +47,7 @@ export const engagementsApi = {
     arbiterAddress?: string;
     status?: string;
     search?: string;
+    sort?: string;
     page?: number;
     limit?: number;
   }): Promise<PaginatedResponse<Engagement>> => {

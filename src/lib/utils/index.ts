@@ -14,7 +14,24 @@ export function shortAddress(address: string, chars = 4): string {
 }
 
 export async function copyToClipboard(text: string) {
-  await navigator.clipboard.writeText(text);
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // fall through to fallback
+    }
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  if (!ok) throw new Error('Copy failed');
 }
 
 /** Convert stroops to human-readable USDC (7 decimal places on Stellar) */
