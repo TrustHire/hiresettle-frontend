@@ -200,3 +200,44 @@ export function timerPillClass(daysRemaining: number, unlockable: boolean): stri
   if (daysRemaining <= 3) return 'timer-approaching';
   return 'timer-active';
 }
+
+// ── Proof file helpers ─────────────────────────────────────────────────────────
+
+/** Format a byte count into a human-readable string, e.g. "1.2 MB". */
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** i;
+  return `${i === 0 ? value : Math.round(value * 10) / 10} ${units[i]}`;
+}
+
+/** File extensions that can execute code or install software on a machine. */
+const EXECUTABLE_EXTENSIONS = new Set([
+  'exe', 'msi', 'bat', 'cmd', 'com', 'cpl', 'scr', 'pif', 'msc', 'gadget',
+  'ps1', 'psm1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'hta', 'jar',
+  'app', 'dmg', 'pkg', 'deb', 'rpm', 'apk', 'sh', 'bash', 'zsh', 'run',
+  'bin', 'dll', 'so', 'reg', 'lnk', 'iso', 'img',
+]);
+
+/** Extract the lowercased extension (without the dot) from a file name. */
+function fileExtension(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  return dot === -1 ? '' : fileName.slice(dot + 1).toLowerCase();
+}
+
+/**
+ * Returns true when a proof file should be opened with a warning — either it
+ * has an executable/scripting extension, or its type is unknown/opaque
+ * (missing MIME type or the generic "application/octet-stream").
+ */
+export function isUnsafeProofFile(
+  fileName?: string | null,
+  mimeType?: string | null,
+): boolean {
+  const ext = fileName ? fileExtension(fileName) : '';
+  if (ext && EXECUTABLE_EXTENSIONS.has(ext)) return true;
+
+  const type = (mimeType ?? '').toLowerCase();
+  return !type || type === 'application/octet-stream';
+}

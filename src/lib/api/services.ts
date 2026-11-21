@@ -2,7 +2,7 @@ import { apiClient } from './client';
 import type {
   ApiResponse, PaginatedResponse,
   Engagement, Milestone, RetentionTimer,
-  Notification, User, CreateEngagementInput,
+  Notification, User, CreateEngagementInput, ProofMetadata,
 } from '@/types';
 
 // ----------------------------------------------------------
@@ -95,6 +95,15 @@ export const milestonesApi = {
   /** Store the off-chain written reason for a raised dispute */
   submitDisputeReason: async (engagementId: string, index: number, reason: string): Promise<void> => {
     await apiClient.post(`/engagements/${engagementId}/milestones/${index}/dispute-reason`, { reason });
+  },
+
+  /** Store the off-chain file metadata (name, size, type) for a submitted proof */
+  submitProofMetadata: async (
+    engagementId: string,
+    index: number,
+    metadata: ProofMetadata,
+  ): Promise<void> => {
+    await apiClient.post(`/engagements/${engagementId}/milestones/${index}/proof-metadata`, metadata);
   },
 };
 

@@ -18,6 +18,16 @@ export type EngagementStatus =
 
 export type UserRole = 'COMPANY' | 'RECRUITER' | 'ARBITER' | 'ADMIN';
 
+/** Off-chain metadata describing an uploaded proof file. */
+export interface ProofMetadata {
+  /** Original file name, e.g. "offer-letter.pdf". */
+  fileName: string;
+  /** File size in bytes. */
+  fileSize: number;
+  /** MIME type reported by the browser, e.g. "application/pdf". */
+  fileType: string;
+}
+
 export interface Milestone {
   id: string;
   engagementId: string;
@@ -29,6 +39,8 @@ export interface Milestone {
   validAfterLedger: number | null;
   unlockEstimatedAt: string | null;
   proofHash: string | null;
+  /** Off-chain metadata for the uploaded proof file (name, size, type). */
+  proofMetadata?: ProofMetadata | null;
   status: MilestoneStatus;
   paymentReleased: string | null;
   confirmedAt: string | null;
