@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, Info } from 'lucide-react';
 import Link from 'next/link';
 import { StrKey } from '@stellar/stellar-sdk';
+import { useQueryClient } from '@tanstack/react-query';
 import { createEngagement } from '@/lib/stellar/contract';
 import { engagementsApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
+import { engagementKeys } from '@/lib/query-keys';
 import { generateEngagementId, LEDGERS_PER_DAY, usdcToStroops } from '@/lib/utils';
 import type { MilestoneInput } from '@/types';
 
@@ -56,6 +58,7 @@ function retentionDaysError(value: number | undefined): string | null {
 
 export default function CreateEngagementPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { address } = useAuthStore();
 
   const [engagementId]   = useState(generateEngagementId);
@@ -159,6 +162,7 @@ export default function CreateEngagementPage() {
     if (!address || !formIsValid) return;
     setSubmitError(null);
     setLoading(true);
+    let transactionSucceeded = false;
 
     try {
       setTxStep('Building transaction…');
@@ -173,6 +177,7 @@ export default function CreateEngagementPage() {
         milestones,
         retentionDays,
       });
+      transactionSucceeded = true;
 
       setTxStep('Saving to backend…');
       await engagementsApi.create({
@@ -191,8 +196,12 @@ export default function CreateEngagementPage() {
         txHash,
       });
 
+      await queryClient.invalidateQueries({ queryKey: engagementKeys.all });
       router.push(`/dashboard/engagements/${engagementId}`);
     } catch (err: any) {
+      if (transactionSucceeded) {
+        await queryClient.invalidateQueries({ queryKey: engagementKeys.all });
+      }
       setSubmitError(err?.message ?? 'Transaction failed. Please try again.');
     } finally {
       setLoading(false);
@@ -400,15 +409,7 @@ export default function CreateEngagementPage() {
                       />
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
                     </div>
-                    {m.kind === 'RETENTION' && (
-                      <div className="relative flex-1 sm:w-24 sm:flex-none">
-                        <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
-                          onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
-                          required className="input pr-6 text-xs w-full min-h-[44px]" />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
                 {m.kind === 'RETENTION' && milestoneRetentionErrors[i] && (

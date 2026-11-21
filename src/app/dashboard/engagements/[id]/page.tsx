@@ -1,84 +1,137 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { ArrowLeft, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
-import Link from 'next/link';
-import axios from 'axios';
-import { engagementsApi } from '@/lib/api/services';
-import { useAuthStore } from '@/lib/hooks/use-auth-store';
-import { MilestoneTimeline } from '@/components/milestones/MilestoneTimeline';
-import { EngagementMeta } from '@/components/engagements/EngagementMeta';
-import { EngagementProgress } from '@/components/engagements/EngagementProgress';
-import { ReplacementBanner } from '@/components/engagements/ReplacementBanner';
-import { ChainEventFeed } from '@/components/engagements/ChainEventFeed';
+import { useCallback, useState } from "react";
+import { useParams } from "next/navigation";
+import { ArrowLeft, RefreshCw, Loader2, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import axios from "axios";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { engagementsApi } from "@/lib/api/services";
+import { useAuthStore } from "@/lib/hooks/use-auth-store";
+import { engagementKeys, timerKeys } from "@/lib/query-keys";
+import { MilestoneTimeline } from "@/components/milestones/MilestoneTimeline";
+import { EngagementMeta } from "@/components/engagements/EngagementMeta";
+import { EngagementProgress } from "@/components/engagements/EngagementProgress";
+import { ReplacementBanner } from "@/components/engagements/ReplacementBanner";
+import { ChainEventFeed } from "@/components/engagements/ChainEventFeed";
 import {
-  engagementStatusBadge, engagementStatusLabel, timeAgo,
-} from '@/lib/utils';
-import { toReadableError } from '@/lib/utils/toast-error';
-import type { Engagement } from '@/types';
+  engagementStatusBadge,
+  engagementStatusLabel,
+  timeAgo,
+} from "@/lib/utils";
+import { toReadableError } from "@/lib/utils/toast-error";
 
 export default function EngagementDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { address } = useAuthStore();
-  const [engagement, setEngagement] = useState<Engagement | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
-  const [notFound, setNotFound] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = async (showLoader = true) => {
-    if (showLoader) setLoading(true);
-    setError(null);
-    setNotFound(false);
-    try {
-      const data = await engagementsApi.get(id);
-      setEngagement(data);
-    } catch (e: unknown) {
-      console.error(e);
-      const is404 =
-        (axios.isAxiosError(e) && e.response?.status === 404) ||
-        (e as { response?: { status?: number } })?.response?.status === 404 ||
-        (e as { status?: number })?.status === 404;
-
-      if (is404) {
-        setNotFound(true);
-      } else {
-        setError(toReadableError(e));
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [id]);
+  const engagementQuery = useQuery({
+    queryKey: engagementKeys.detail(id),
+    queryFn: () => engagementsApi.get(id),
+    enabled: !!id,
+    retry: false,
+  });
+  const engagement = engagementQuery.data;
+  const loading = engagementQuery.isLoading;
+  const error = engagementQuery.isError
+    ? toReadableError(engagementQuery.error)
+    : null;
+  const notFound =
+    engagementQuery.isError &&
+    ((axios.isAxiosError(engagementQuery.error) &&
+      engagementQuery.error.response?.status === 404) ||
+      (engagementQuery.error as { response?: { status?: number } })?.response
+        ?.status === 404 ||
+      (engagementQuery.error as { status?: number })?.status === 404);
+  const load = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: engagementKeys.all }),
+      queryClient.invalidateQueries({ queryKey: timerKeys.all }),
+    ]);
+  }, [queryClient]);
 
   const handleSync = async () => {
     setSyncing(true);
     try {
       await engagementsApi.sync(id);
-      await load(false);
+      await load();
     } finally {
       setSyncing(false);
     }
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
-    </div>
-  );
+  if (loading)
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+      </div>
+    );
 
-  if (notFound) return (
-    <div className="text-center py-16">
-      <p className="text-gray-500">Engagement not found.</p>
-      <Link href="/dashboard/engagements" className="btn-secondary mt-4 inline-flex">
-        Back to engagements
-      </Link>
-    </div>
-  );
+  if (notFound)
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-500">Engagement not found.</p>
+        <Link
+          href="/dashboard/engagements"
+          className="btn-secondary mt-4 inline-flex"
+        >
+          Back to engagements
+        </Link>
+      </div>
+    );
 
-  if (error || !engagement) return (
+  if (error || !engagement)
+    return (
+      <div>
+        <Link
+          href="/dashboard/engagements"
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-5 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          All engagements
+        </Link>
+        <div className="card p-12 text-center max-w-lg mx-auto">
+          <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-3" />
+          <h2 className="text-base font-semibold text-gray-900 mb-1">
+            Failed to load engagement
+          </h2>
+          <p className="text-sm text-gray-500 mb-6">
+            {error ||
+              "An unexpected error occurred while loading this engagement."}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => engagementQuery.refetch()}
+              className="btn-primary inline-flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </button>
+            <Link
+              href="/dashboard/engagements"
+              className="btn-secondary inline-flex"
+            >
+              Back to engagements
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+
+  // Detect user role
+  const isCompany = address === engagement.companyAddress;
+  const isRecruiter = address === engagement.recruiterAddress;
+  const isArbiter = address === engagement.arbiterAddress;
+  const userRole = isCompany
+    ? "company"
+    : isRecruiter
+      ? "recruiter"
+      : isArbiter
+        ? "arbiter"
+        : "observer";
+
+  return (
     <div>
       <Link
         href="/dashboard/engagements"
@@ -87,73 +140,54 @@ export default function EngagementDetailPage() {
         <ArrowLeft className="w-4 h-4" />
         All engagements
       </Link>
-      <div className="card p-12 text-center max-w-lg mx-auto">
-        <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-3" />
-        <h2 className="text-base font-semibold text-gray-900 mb-1">Failed to load engagement</h2>
-        <p className="text-sm text-gray-500 mb-6">
-          {error || 'An unexpected error occurred while loading this engagement.'}
-        </p>
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={() => load()}
-            className="btn-primary inline-flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Retry
-          </button>
-          <Link href="/dashboard/engagements" className="btn-secondary inline-flex">
-            Back to engagements
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Detect user role
-  const isCompany   = address === engagement.companyAddress;
-  const isRecruiter = address === engagement.recruiterAddress;
-  const isArbiter   = address === engagement.arbiterAddress;
-  const userRole = isCompany ? 'company' : isRecruiter ? 'recruiter' : isArbiter ? 'arbiter' : 'observer';
-
-  return (
-    <div>
-      <Link href="/dashboard/engagements"
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-5 transition-colors">
-        <ArrowLeft className="w-4 h-4" />
-        All engagements
-      </Link>
 
       {/* Header */}
       <div className="flex items-start justify-between mb-5">
         <div>
           <div className="flex items-center gap-2.5 mb-1 flex-wrap">
-            <h1 className="text-xl font-semibold text-gray-900 font-mono">{engagement.id}</h1>
+            <h1 className="text-xl font-semibold text-gray-900 font-mono">
+              {engagement.id}
+            </h1>
             <span className={engagementStatusBadge(engagement.status)}>
               {engagementStatusLabel(engagement.status)}
             </span>
-            <span className={`badge ${
-              userRole === 'company'   ? 'badge-company' :
-              userRole === 'recruiter' ? 'badge-recruiter' :
-              userRole === 'arbiter'   ? 'badge-arbiter' : 'badge-pending'
-            } capitalize`}>
+            <span
+              className={`badge ${
+                userRole === "company"
+                  ? "badge-company"
+                  : userRole === "recruiter"
+                    ? "badge-recruiter"
+                    : userRole === "arbiter"
+                      ? "badge-arbiter"
+                      : "badge-pending"
+              } capitalize`}
+            >
               {userRole}
             </span>
           </div>
-          <p className="text-sm font-medium text-gray-700">{engagement.jobTitle}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Created {timeAgo(engagement.createdAt)}</p>
+          <p className="text-sm font-medium text-gray-700">
+            {engagement.jobTitle}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Created {timeAgo(engagement.createdAt)}
+          </p>
         </div>
         <button
           onClick={handleSync}
           disabled={syncing}
           className="btn-secondary text-xs"
         >
-          {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {syncing ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
           Sync
         </button>
       </div>
 
       {/* Replacement banner */}
-      {engagement.status === 'ReplacementRequested' && (
+      {engagement.status === "ReplacementRequested" && (
         <ReplacementBanner
           engagement={engagement}
           userRole={userRole}

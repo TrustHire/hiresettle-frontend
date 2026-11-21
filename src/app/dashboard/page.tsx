@@ -1,15 +1,23 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useMemo } from 'react';
-import Link from 'next/link';
+import { useMemo } from "react";
+import Link from "next/link";
 import {
-  DollarSign, TrendingUp, Briefcase, Scale,
-  Clock, AlertCircle, ChevronRight, Loader2,
-} from 'lucide-react';
-import { engagementsApi } from '@/lib/api/services';
-import { useAuthStore } from '@/lib/hooks/use-auth-store';
-import { stroopsToUsdc, formatDate, cn } from '@/lib/utils';
-import type { Engagement, Milestone, UserRole } from '@/types';
+  DollarSign,
+  TrendingUp,
+  Briefcase,
+  Scale,
+  Clock,
+  AlertCircle,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { engagementsApi } from "@/lib/api/services";
+import { useAuthStore } from "@/lib/hooks/use-auth-store";
+import { engagementKeys } from "@/lib/query-keys";
+import { stroopsToUsdc, formatDate, cn } from "@/lib/utils";
+import type { Engagement, Milestone, UserRole } from "@/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,8 +32,10 @@ interface ActionItem {
   engagement: Engagement;
   milestone: Milestone;
   label: string;
-  kind: 'proof' | 'unlock' | 'dispute';
+  kind: "proof" | "unlock" | "dispute";
 }
+
+const EMPTY_ENGAGEMENTS: Engagement[] = [];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -35,34 +45,42 @@ function daysFromNow(dateStr: string): number {
 }
 
 function bigintAdd(a: string, b: string): bigint {
-  try { return BigInt(a) + BigInt(b); } catch { return BigInt(0); }
+  try {
+    return BigInt(a) + BigInt(b);
+  } catch {
+    return BigInt(0);
+  }
 }
 
 function actionKindForRole(
   milestone: Milestone,
   role: UserRole | undefined,
-): { label: string; kind: ActionItem['kind'] } | null {
+): { label: string; kind: ActionItem["kind"] } | null {
   const { status, kind } = milestone;
 
   // Unlockable retention milestone — any role can trigger
-  if (kind === 'Retention' && status === 'Pending') {
-    return { label: 'Ready to unlock', kind: 'unlock' };
+  if (kind === "Retention" && status === "Pending") {
+    return { label: "Ready to unlock", kind: "unlock" };
   }
 
   switch (role) {
-    case 'COMPANY':
-      if (status === 'ProofSubmitted') return { label: 'Review proof', kind: 'proof' };
+    case "COMPANY":
+      if (status === "ProofSubmitted")
+        return { label: "Review proof", kind: "proof" };
       break;
-    case 'RECRUITER':
-      if (status === 'Pending' && kind === 'Placement')
-        return { label: 'Submit proof', kind: 'proof' };
+    case "RECRUITER":
+      if (status === "Pending" && kind === "Placement")
+        return { label: "Submit proof", kind: "proof" };
       break;
-    case 'ARBITER':
-      if (status === 'Disputed') return { label: 'Resolve dispute', kind: 'dispute' };
+    case "ARBITER":
+      if (status === "Disputed")
+        return { label: "Resolve dispute", kind: "dispute" };
       break;
-    case 'ADMIN':
-      if (status === 'Disputed') return { label: 'Resolve dispute', kind: 'dispute' };
-      if (status === 'ProofSubmitted') return { label: 'Review proof', kind: 'proof' };
+    case "ADMIN":
+      if (status === "Disputed")
+        return { label: "Resolve dispute", kind: "dispute" };
+      if (status === "ProofSubmitted")
+        return { label: "Review proof", kind: "proof" };
       break;
   }
   return null;
@@ -85,7 +103,12 @@ function StatCard({
 }) {
   return (
     <div className="card p-5 flex items-start gap-4">
-      <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', color)}>
+      <div
+        className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
+          color,
+        )}
+      >
         <Icon className="w-5 h-5" />
       </div>
       <div className="min-w-0">
@@ -111,62 +134,72 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 }
 
 function EmptyState({ message }: { message: string }) {
-  return (
-    <p className="text-sm text-gray-400 py-4 text-center">{message}</p>
-  );
+  return <p className="text-sm text-gray-400 py-4 text-center">{message}</p>;
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function DashboardOverviewPage() {
-  const { address, user } = useAuthStore();
-  const [engagements, setEngagements] = useState<Engagement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { address, user, isHydrated } = useAuthStore();
+  const overviewQuery = useQuery({
+    queryKey: [...engagementKeys.all, "overview", address, user?.role],
+    enabled: isHydrated && !!address,
+    queryFn: async () => {
+      if (!address) {
+        throw new Error(
+          "A wallet address is required to load dashboard engagements.",
+        );
+      }
 
-  useEffect(() => {
-    if (!address) return;
-    setLoading(true);
-    setError(null);
+      // Fetch all engagements where the user is a participant. For roles that
+      // appear as multiple parties we fire parallel requests and deduplicate.
+      const queries: Promise<Engagement[]>[] = [];
 
-    // Fetch all engagements where the user is a participant. For roles that
-    // appear as multiple parties we fire parallel requests and deduplicate.
-    const queries: Promise<Engagement[]>[] = [];
+      if (!user?.role || user.role === "COMPANY") {
+        queries.push(
+          engagementsApi
+            .list({ companyAddress: address, limit: 200 })
+            .then((r) => r.data),
+        );
+      }
+      if (!user?.role || user.role === "RECRUITER") {
+        queries.push(
+          engagementsApi
+            .list({ recruiterAddress: address, limit: 200 })
+            .then((r) => r.data),
+        );
+      }
+      if (user?.role === "ARBITER" || user?.role === "ADMIN") {
+        // Arbiter address isn't a filter the API exposes, so fetch all active
+        // engagements and filter client-side.
+        queries.push(
+          engagementsApi
+            .list({ limit: 200 })
+            .then((r) =>
+              r.data.filter(
+                (engagement) => engagement.arbiterAddress === address,
+              ),
+            ),
+        );
+      }
+      if (queries.length === 0) {
+        // Fallback: fetch all
+        queries.push(engagementsApi.list({ limit: 200 }).then((r) => r.data));
+      }
 
-    if (!user?.role || user.role === 'COMPANY') {
-      queries.push(
-        engagementsApi.list({ companyAddress: address, limit: 200 }).then((r) => r.data),
-      );
-    }
-    if (!user?.role || user.role === 'RECRUITER') {
-      queries.push(
-        engagementsApi.list({ recruiterAddress: address, limit: 200 }).then((r) => r.data),
-      );
-    }
-    if (user?.role === 'ARBITER' || user?.role === 'ADMIN') {
-      // Arbiter address isn't a filter the API exposes, so fetch all active
-      // engagements and filter client-side.
-      queries.push(
-        engagementsApi.list({ limit: 200 }).then((r) =>
-          r.data.filter((e) => e.arbiterAddress === address),
-        ),
-      );
-    }
-    if (queries.length === 0) {
-      // Fallback: fetch all
-      queries.push(engagementsApi.list({ limit: 200 }).then((r) => r.data));
-    }
-
-    Promise.all(queries)
-      .then((results) => {
-        // Deduplicate by id
-        const map = new Map<string, Engagement>();
-        results.flat().forEach((e) => map.set(e.id, e));
-        setEngagements([...map.values()]);
-      })
-      .catch((err) => setError(err?.message ?? 'Failed to load data.'))
-      .finally(() => setLoading(false));
-  }, [address, user?.role]);
+      const results = await Promise.all(queries);
+      const map = new Map<string, Engagement>();
+      results
+        .flat()
+        .forEach((engagement) => map.set(engagement.id, engagement));
+      return [...map.values()];
+    },
+  });
+  const engagements = overviewQuery.data ?? EMPTY_ENGAGEMENTS;
+  const loading = !isHydrated || (!!address && overviewQuery.isLoading);
+  const error = overviewQuery.isError
+    ? overviewQuery.error.message || "Failed to load data."
+    : null;
 
   // ── Derived stats ────────────────────────────────────────────────────────────
 
@@ -178,14 +211,14 @@ export default function DashboardOverviewPage() {
 
     for (const eng of engagements) {
       // In-escrow = totalAmount − releasedAmount
-      const total    = BigInt(eng.totalAmount    ?? '0');
-      const released = BigInt(eng.releasedAmount ?? '0');
-      totalEscrow   += total - released;
+      const total = BigInt(eng.totalAmount ?? "0");
+      const released = BigInt(eng.releasedAmount ?? "0");
+      totalEscrow += total - released;
       totalReleased += released;
 
-      if (eng.status === 'Active') activeCount++;
+      if (eng.status === "Active") activeCount++;
 
-      const hasDispute = eng.milestones?.some((m) => m.status === 'Disputed');
+      const hasDispute = eng.milestones?.some((m) => m.status === "Disputed");
       if (hasDispute) disputeCount++;
     }
 
@@ -201,8 +234,8 @@ export default function DashboardOverviewPage() {
     for (const eng of engagements) {
       for (const ms of eng.milestones ?? []) {
         if (
-          ms.kind === 'Retention' &&
-          ms.status === 'Locked' &&
+          ms.kind === "Retention" &&
+          ms.status === "Locked" &&
           ms.unlockEstimatedAt
         ) {
           const unlockTs = new Date(ms.unlockEstimatedAt).getTime();
@@ -227,7 +260,7 @@ export default function DashboardOverviewPage() {
     const items: ActionItem[] = [];
 
     for (const eng of engagements) {
-      if (eng.status !== 'Active') continue;
+      if (eng.status !== "Active") continue;
       for (const ms of eng.milestones ?? []) {
         const action = actionKindForRole(ms, user?.role);
         if (action) {
@@ -237,7 +270,11 @@ export default function DashboardOverviewPage() {
     }
 
     // Sort: disputes first, then proofs, then unlocks
-    const priority: Record<ActionItem['kind'], number> = { dispute: 0, proof: 1, unlock: 2 };
+    const priority: Record<ActionItem["kind"], number> = {
+      dispute: 0,
+      proof: 1,
+      unlock: 2,
+    };
     return items.sort((a, b) => priority[a.kind] - priority[b.kind]);
   }, [engagements, user?.role]);
 
@@ -267,8 +304,8 @@ export default function DashboardOverviewPage() {
         <h1 className="text-xl font-semibold text-gray-900 mb-1">Overview</h1>
         <p className="text-sm text-gray-500">
           {engagements.length === 0
-            ? 'No engagements yet.'
-            : `Summary across ${engagements.length} engagement${engagements.length === 1 ? '' : 's'}.`}
+            ? "No engagements yet."
+            : `Summary across ${engagements.length} engagement${engagements.length === 1 ? "" : "s"}.`}
         </p>
       </div>
 
@@ -289,7 +326,9 @@ export default function DashboardOverviewPage() {
         <StatCard
           label="Active engagements"
           value={String(stats.activeCount)}
-          sub={engagements.length > 0 ? `${engagements.length} total` : undefined}
+          sub={
+            engagements.length > 0 ? `${engagements.length} total` : undefined
+          }
           icon={Briefcase}
           color="bg-blue-50 text-blue-600"
         />
@@ -297,7 +336,11 @@ export default function DashboardOverviewPage() {
           label="Open disputes"
           value={String(stats.disputeCount)}
           icon={Scale}
-          color={stats.disputeCount > 0 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-400'}
+          color={
+            stats.disputeCount > 0
+              ? "bg-red-50 text-red-600"
+              : "bg-gray-100 text-gray-400"
+          }
         />
       </div>
 
@@ -316,12 +359,16 @@ export default function DashboardOverviewPage() {
                     className="flex items-center gap-3 py-3 hover:bg-gray-50 -mx-5 px-5 rounded-xl transition-colors group"
                   >
                     {/* Kind indicator */}
-                    <span className={cn(
-                      'w-2 h-2 rounded-full flex-shrink-0',
-                      item.kind === 'dispute' ? 'bg-red-500' :
-                      item.kind === 'proof'   ? 'bg-amber-500' :
-                                                'bg-green-500',
-                    )} />
+                    <span
+                      className={cn(
+                        "w-2 h-2 rounded-full flex-shrink-0",
+                        item.kind === "dispute"
+                          ? "bg-red-500"
+                          : item.kind === "proof"
+                            ? "bg-amber-500"
+                            : "bg-green-500",
+                      )}
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
                         {item.milestone.name}
@@ -330,12 +377,16 @@ export default function DashboardOverviewPage() {
                         {item.engagement.jobTitle}
                       </p>
                     </div>
-                    <span className={cn(
-                      'text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0',
-                      item.kind === 'dispute' ? 'bg-red-50 text-red-700' :
-                      item.kind === 'proof'   ? 'bg-amber-50 text-amber-700' :
-                                                'bg-green-50 text-green-700',
-                    )}>
+                    <span
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0",
+                        item.kind === "dispute"
+                          ? "bg-red-50 text-red-700"
+                          : item.kind === "proof"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-green-50 text-green-700",
+                      )}
+                    >
                       {item.label}
                     </span>
                     <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" />
@@ -348,7 +399,10 @@ export default function DashboardOverviewPage() {
 
         {/* ── Upcoming unlocks ── */}
         <div className="card p-5">
-          <SectionHeader title="Upcoming unlocks" count={upcomingUnlocks.length} />
+          <SectionHeader
+            title="Upcoming unlocks"
+            count={upcomingUnlocks.length}
+          />
           {upcomingUnlocks.length === 0 ? (
             <EmptyState message="No retention milestones unlocking in the next 14 days." />
           ) : (
@@ -359,10 +413,14 @@ export default function DashboardOverviewPage() {
                     href={`/dashboard/engagements/${item.engagement.id}`}
                     className="flex items-center gap-3 py-3 hover:bg-gray-50 -mx-5 px-5 rounded-xl transition-colors group"
                   >
-                    <div className={cn(
-                      'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold',
-                      item.daysUntil <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-700',
-                    )}>
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold",
+                        item.daysUntil <= 3
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-blue-50 text-blue-700",
+                      )}
+                    >
                       {item.daysUntil}d
                     </div>
                     <div className="flex-1 min-w-0">
@@ -370,13 +428,18 @@ export default function DashboardOverviewPage() {
                         {item.milestone.name}
                       </p>
                       <p className="text-xs text-gray-400 truncate">
-                        {item.engagement.jobTitle} · unlocks {formatDate(item.unlockDate)}
+                        {item.engagement.jobTitle} · unlocks{" "}
+                        {formatDate(item.unlockDate)}
                       </p>
                     </div>
-                    <Clock className={cn(
-                      'w-3.5 h-3.5 flex-shrink-0',
-                      item.daysUntil <= 3 ? 'text-amber-400' : 'text-gray-300',
-                    )} />
+                    <Clock
+                      className={cn(
+                        "w-3.5 h-3.5 flex-shrink-0",
+                        item.daysUntil <= 3
+                          ? "text-amber-400"
+                          : "text-gray-300",
+                      )}
+                    />
                     <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" />
                   </Link>
                 </li>

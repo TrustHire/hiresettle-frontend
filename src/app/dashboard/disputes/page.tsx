@@ -1,57 +1,44 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Scale, Loader2, Clock, Briefcase } from 'lucide-react';
-import { engagementsApi } from '@/lib/api/services';
-import { useAuthStore } from '@/lib/hooks/use-auth-store';
-import { timeAgo, shortAddress } from '@/lib/utils';
-import type { Engagement, Milestone } from '@/types';
+import { useMemo } from "react";
+import Link from "next/link";
+import { Scale, Loader2, Clock, Briefcase } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { engagementsApi } from "@/lib/api/services";
+import { useAuthStore } from "@/lib/hooks/use-auth-store";
+import { engagementKeys } from "@/lib/query-keys";
+import { timeAgo, shortAddress } from "@/lib/utils";
+import type { Engagement, Milestone } from "@/types";
 
 interface DisputeRow {
   engagement: Engagement;
-  milestone:  Milestone;
+  milestone: Milestone;
 }
 
 export default function DisputesPage() {
   const { address, isHydrated } = useAuthStore();
-  const [rows,    setRows]    = useState<DisputeRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Wait until the auth store has finished rehydrating before deciding
-    // whether to fetch or show an empty/logged-out state.
-    if (!isHydrated) return;
-    if (!address) {
-      setLoading(false);
-      return;
-    }
-
-    // Fetch all engagements where the user is arbiter.
-    // We request a high limit so we get them all in one shot; the dispute queue
-    // is typically small. If this grows we can paginate later.
-    engagementsApi
-      .list({ arbiterAddress: address, limit: 200 })
-      .then((res) => {
-        const disputed: DisputeRow[] = [];
-        for (const engagement of res.data) {
-          for (const milestone of engagement.milestones ?? []) {
-            if (milestone.status === 'Disputed') {
-              disputed.push({ engagement, milestone });
-            }
-          }
+  const filters = { arbiterAddress: address ?? undefined, limit: 200 };
+  const disputesQuery = useQuery({
+    queryKey: engagementKeys.list(filters),
+    queryFn: () => engagementsApi.list(filters),
+    enabled: isHydrated && !!address,
+  });
+  const rows = useMemo(() => {
+    const disputed: DisputeRow[] = [];
+    for (const engagement of disputesQuery.data?.data ?? []) {
+      for (const milestone of engagement.milestones ?? []) {
+        if (milestone.status === "Disputed") {
+          disputed.push({ engagement, milestone });
         }
-        // Sort oldest dispute first so urgent items surface at the top
-        disputed.sort(
-          (a, b) =>
-            new Date(a.milestone.updatedAt).getTime() -
-            new Date(b.milestone.updatedAt).getTime(),
-        );
-        setRows(disputed);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [address, isHydrated]);
+      }
+    }
+    return disputed.sort(
+      (a, b) =>
+        new Date(a.milestone.updatedAt).getTime() -
+        new Date(b.milestone.updatedAt).getTime(),
+    );
+  }, [disputesQuery.data]);
+  const loading = !isHydrated || disputesQuery.isLoading;
 
   return (
     <div>
@@ -60,14 +47,24 @@ export default function DisputesPage() {
         <h1 className="text-xl font-semibold text-gray-900">Dispute queue</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {loading
-            ? 'Loading…'
-            : `${rows.length} open dispute${rows.length !== 1 ? 's' : ''} awaiting review`}
+            ? "Loading…"
+            : `${rows.length} open dispute${rows.length !== 1 ? "s" : ""} awaiting review`}
         </p>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+        </div>
+      ) : disputesQuery.isError ? (
+        <div className="card p-8 text-center">
+          <p className="text-sm text-red-600">Failed to load disputes.</p>
+          <button
+            onClick={() => disputesQuery.refetch()}
+            className="btn-secondary mt-4"
+          >
+            Retry
+          </button>
         </div>
       ) : rows.length === 0 ? (
         <div className="card p-12 text-center">
@@ -98,7 +95,8 @@ export default function DisputesPage() {
                       {engagement.jobTitle}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Milestone {milestone.milestoneIndex + 1} — {milestone.name}
+                      Milestone {milestone.milestoneIndex + 1} —{" "}
+                      {milestone.name}
                     </p>
                   </div>
                   <span className="badge bg-red-50 text-red-700 flex-shrink-0 text-[10px]">
