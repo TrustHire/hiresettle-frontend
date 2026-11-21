@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+const webpack = require('webpack');
 
 function getOrigin(urlString, fallback = '') {
   try {
@@ -45,6 +47,21 @@ const cspHeader = [
 
 const nextConfig = {
   reactStrictMode: true,
+  webpack(config) {
+    if (process.env.PLAYWRIGHT_E2E === '1') {
+      config.resolve.alias['@stellar/freighter-api$'] = path.resolve(
+        __dirname,
+        'tests/e2e/mocks/freighter-api.ts',
+      );
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /@\/lib\/stellar\/contract$/,
+          path.resolve(__dirname, 'tests/e2e/mocks/contract.ts'),
+        ),
+      );
+    }
+    return config;
+  },
   async headers() {
     return [
       {

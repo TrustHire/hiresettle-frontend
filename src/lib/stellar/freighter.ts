@@ -5,42 +5,33 @@
 
 import {
   isConnected,
-  getAddress,
+  getPublicKey,
   signTransaction,
   requestAccess,
   getNetwork,
-  WatchWalletChanges,
 } from '@stellar/freighter-api';
 
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
-    const result = await isConnected();
-    return result.isConnected;
+    return await isConnected();
   } catch { return false; }
 }
 
 export async function connectFreighter(): Promise<string> {
-  const access = await requestAccess();
-  if (access.error) throw new Error(access.error);
+  await requestAccess();
   return getUserAddress();
 }
 
 export async function getUserAddress(): Promise<string> {
-  const result = await getAddress();
-  if (result.error) throw new Error(result.error);
-  return result.address;
+  return getPublicKey();
 }
 
 export async function getWalletNetwork(): Promise<string> {
-  const result = await getNetwork();
-  if (result.error) throw new Error(result.error);
-  return result.network;
+  return getNetwork();
 }
 
 export async function signTx(xdr: string, networkPassphrase: string): Promise<string> {
-  const result = await signTransaction(xdr, { networkPassphrase });
-  if (result.error) throw new Error(result.error);
-  return result.signedTxXdr;
+  return signTransaction(xdr, { networkPassphrase });
 }
 
 /**
@@ -97,17 +88,13 @@ export async function getFreighterStatus(): Promise<{ address: string; network: 
 export function watchWallet(
   onChange: (address: string, network: string) => void,
 ): () => void {
-  // Fire once immediately so the UI has an initial reading.
-  getFreighterStatus()
-    .then(({ address, network }) => onChange(address, network))
-    .catch(() => {});
-
-  const watcher = new WatchWalletChanges(3000);
-  watcher.watch(async () => {
+  const checkWallet = async () => {
     try {
       const { address, network } = await getFreighterStatus();
       onChange(address, network);
     } catch {}
-  });
-  return () => watcher.stop();
+  };
+  void checkWallet();
+  const interval = setInterval(checkWallet, 3000);
+  return () => clearInterval(interval);
 }

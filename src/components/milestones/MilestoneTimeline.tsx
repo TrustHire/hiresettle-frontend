@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  CheckCircle2, Clock, Lock, AlertTriangle,
+  CheckCircle2, Clock, Lock, AlertTriangle, Chrome,
   Upload, ThumbsUp, ThumbsDown, XCircle, Loader2,
   ExternalLink, Copy, Check, CalendarPlus, Download, ChevronDown,
 } from 'lucide-react';
@@ -300,7 +300,7 @@ function MilestoneRow({
   const { state: txState, open: openTx, reset: resetTx, onStatus, resumeCheck } = useTxProgress();
 
   // Store the last action so Retry can replay it
-  const retryFnRef = useRef<(() => Promise<void>) | null>(null);
+  const retryFnRef = useRef<(() => Promise<unknown>) | null>(null);
 
   useEffect(() => {
     if (milestone.kind === 'Retention' && milestone.status === 'Locked') {
@@ -341,7 +341,7 @@ function MilestoneRow({
    *  4. On success calls onUpdate(); modal stays open until user dismisses
    *  5. On error the modal shows the failed step — no alert()
    */
-  const wrap = useCallback(async (fn: () => Promise<void>) => {
+  const wrap = useCallback(async (fn: () => Promise<unknown>) => {
     if (!address || loading) return;
     retryFnRef.current = fn;
     openTx();

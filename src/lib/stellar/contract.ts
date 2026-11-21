@@ -134,7 +134,7 @@ async function invokeContract(
   const { Transaction } = await import('@stellar/stellar-sdk');
   let response: Awaited<ReturnType<typeof rpc.sendTransaction>>;
   try {
-    response = await rpc.sendTransaction(new Transaction(signedXdr));
+    response = await rpc.sendTransaction(new Transaction(signedXdr, NETWORK_PASSPHRASE));
   } catch (err: any) {
     notify('submitting', 'error', { error: err?.message ?? 'Submission failed' });
     throw err;

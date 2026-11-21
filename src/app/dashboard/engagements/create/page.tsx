@@ -389,26 +389,13 @@ export default function CreateEngagementPage() {
                     <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
                   </div>
                   {m.kind === 'RETENTION' && (
-                    <div className="relative w-24">
-                      <input
-                        type="number" min="1"
-                        value={m.retentionDays ?? ''}
-                        placeholder="days"
-                        onChange={(e) => update(i, 'retentionDays', e.target.value === '' ? undefined : Number(e.target.value))}
-                        aria-invalid={!!milestoneRetentionErrors[i]}
-                        className={`input pr-6 text-xs ${milestoneRetentionErrors[i] ? 'border-red-400' : ''}`}
-                      />
+                    <div className="relative flex-1 sm:w-24 sm:flex-none">
+                      <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
+                        onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
+                        required className="input pr-6 text-xs w-full min-h-[44px]" />
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
                     </div>
-                    {m.kind === 'RETENTION' && (
-                      <div className="relative flex-1 sm:w-24 sm:flex-none">
-                        <input type="number" min="1" max="365" value={m.retentionDays ?? 30}
-                          onChange={(e) => update(i, 'retentionDays', Number(e.target.value))}
-                          required className="input pr-6 text-xs w-full min-h-[44px]" />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">d</span>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
                 {m.kind === 'RETENTION' && milestoneRetentionErrors[i] && (

@@ -167,6 +167,17 @@ npm run dev                   # → http://localhost:3001
 
 Install [Freighter](https://freighter.app), switch to Testnet, fund a test account at [friendbot.stellar.org](https://friendbot.stellar.org).
 
+## End-to-end tests
+
+Playwright tests use a test-only Freighter API stub and an in-memory mocked backend; no real wallet or Stellar network is needed.
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+The test command starts the app with its E2E-only wallet and contract mocks. The same suite runs on pushes and pull requests in GitHub Actions.
+
 ---
 
 ## Production Checklist
