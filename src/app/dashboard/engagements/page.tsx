@@ -15,6 +15,14 @@ const PAGE_SIZE = 10;
 
 type ViewAs = 'company' | 'recruiter' | 'arbiter';
 
+const STATUS_FILTERS: { value: EngagementStatus | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'ReplacementRequested', label: 'Replacement requested' },
+  { value: 'Cancelled', label: 'Cancelled' },
+];
+
 export default function EngagementsPage() {
   return (
     <Suspense
@@ -55,6 +63,7 @@ function EngagementsContent() {
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -147,6 +156,43 @@ function EngagementsContent() {
       .finally(() => setLoading(false));
   }, [address, isHydrated, committedSearch, statusFilter, viewAs, page]);
 
+  // --- Status counts for the filter chips (scoped to the current role view) ---
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (!address) {
+      setCounts({});
+      return;
+    }
+
+    const roleFilter =
+      viewAs === 'company' ? { companyAddress: address } :
+        viewAs === 'recruiter' ? { recruiterAddress: address } :
+          { arbiterAddress: address };
+
+    const statuses: EngagementStatus[] = ['Active', 'Completed', 'ReplacementRequested', 'Cancelled'];
+    let cancelled = false;
+
+    Promise.all(
+      statuses.map((s) =>
+        engagementsApi
+          .list({ ...roleFilter, status: s, page: 1, limit: 1 })
+          .then((res) => res.meta.total),
+      ),
+    )
+      .then((totals) => {
+        if (cancelled) return;
+        const next: Record<string, number> = { all: 0 };
+        statuses.forEach((s, i) => {
+          next[s] = totals[i];
+          next.all += totals[i];
+        });
+        setCounts(next);
+      })
+      .catch(() => { /* leave existing counts on failure */ });
+
+    return () => { cancelled = true; };
+  }, [address, isHydrated, viewAs]);
+
   const isSearching = committedSearch.trim().length > 0;
 
   return (
@@ -207,19 +253,34 @@ function EngagementsContent() {
             </button>
           )}
         </div>
+      </div>
 
-        {/* Status */}
-        <select
-          value={statusFilter}
-          onChange={(e) => handleStatusChange(e.target.value as EngagementStatus | '')}
-          className="input w-auto"
-        >
-          <option value="">All statuses</option>
-          <option value="Active">Active</option>
-          <option value="Completed">Completed</option>
-          <option value="ReplacementRequested">Replacement requested</option>
-          <option value="Cancelled">Cancelled</option>
-        </select>
+      {/* Status filter chips */}
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        {STATUS_FILTERS.map(({ value, label }) => {
+          const key = value || 'all';
+          const count = counts[key];
+          const active = statusFilter === value;
+          return (
+            <button
+              key={key}
+              onClick={() => handleStatusChange(value)}
+              aria-pressed={active}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${active
+                  ? 'bg-brand-600 border-brand-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+            >
+              {label}
+              <span
+                className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold ${active ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                  }`}
+              >
+                {count ?? '–'}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* List */}

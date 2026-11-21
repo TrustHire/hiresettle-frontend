@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format, formatDistanceToNow } from 'date-fns';
-import type { MilestoneStatus, EngagementStatus } from '@/types';
+import type { MilestoneStatus, EngagementStatus, ChainEvent } from '@/types';
 
 export const LEDGERS_PER_DAY = Number(process.env.NEXT_PUBLIC_LEDGERS_PER_DAY) || 17280;
 
@@ -199,4 +199,37 @@ export function timerPillClass(daysRemaining: number, unlockable: boolean): stri
   if (unlockable || daysRemaining <= 0) return 'timer-ready';
   if (daysRemaining <= 3) return 'timer-approaching';
   return 'timer-active';
+}
+
+// ── Chain event export ────────────────────────────────────────────────────────
+
+/**
+ * Trigger a browser download of chain events as a pretty-printed JSON file for
+ * auditing. Each row carries the event name, ledger, tx hash, payload and
+ * timestamp; the filename is derived from the engagement ID and the date, e.g.
+ * `chain-events-ENG-20260101-ABCD1234-2026-11-21.json`.
+ */
+export function downloadChainEventsJson(
+  events: ChainEvent[],
+  engagementId?: string | null,
+): void {
+  const rows = events.map((ev) => ({
+    eventName: ev.eventName,
+    ledger: ev.ledger,
+    txHash: ev.txHash,
+    payload: ev.payload,
+    timestamp: ev.createdAt,
+  }));
+
+  const date = format(new Date(), 'yyyy-MM-dd');
+  const slug = engagementId
+    ? engagementId.replace(/[^A-Za-z0-9._-]/g, '-')
+    : 'all-engagements';
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `chain-events-${slug}-${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
