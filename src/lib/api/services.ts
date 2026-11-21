@@ -96,6 +96,11 @@ export const milestonesApi = {
   submitDisputeReason: async (engagementId: string, index: number, reason: string): Promise<void> => {
     await apiClient.post(`/engagements/${engagementId}/milestones/${index}/dispute-reason`, { reason });
   },
+
+  /** Store the arbiter's written rationale after resolving a dispute */
+  submitResolutionRationale: async (engagementId: string, index: number, rationale: string): Promise<void> => {
+    await apiClient.post(`/engagements/${engagementId}/milestones/${index}/resolution-rationale`, { rationale });
+  },
 };
 
 // ----------------------------------------------------------

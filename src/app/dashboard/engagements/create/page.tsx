@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, Info } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Plus, Trash2, Loader2, AlertCircle, Info, RotateCcw, X, ShieldCheck, ChevronRight, User, Briefcase, Layers, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { StrKey } from '@stellar/stellar-sdk';
 import { createEngagement } from '@/lib/stellar/contract';
 import { engagementsApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { generateEngagementId, LEDGERS_PER_DAY, usdcToStroops } from '@/lib/utils';
+import { useEngagementDraft } from '@/lib/hooks/use-engagement-draft';
 import type { MilestoneInput } from '@/types';
 
 const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS!;
@@ -56,6 +57,8 @@ function retentionDaysError(value: number | undefined): string | null {
 
 export default function CreateEngagementPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const cloneFromId = searchParams.get('cloneFrom');
   const { address } = useAuthStore();
 
   const [engagementId]   = useState(generateEngagementId);
@@ -70,6 +73,114 @@ export default function CreateEngagementPage() {
   const [loading, setLoading]                   = useState(false);
   const [txStep, setTxStep]                     = useState('');
   const [submitError, setSubmitError]           = useState<string | null>(null);
+
+  /** Controls which screen is shown: the form or the pre-sign review. */
+  const [step, setStep] = useState<'form' | 'review'>('form');
+
+  // ── Draft autosave ───────────────────────────────────────────────────────────
+
+  const draft = useEngagementDraft(address);
+
+  /**
+   * pendingDraft holds a loaded draft that the user hasn't yet acted on.
+   * null = no draft exists, undefined = not yet checked (SSR / hydration guard).
+   */
+  const [pendingDraft, setPendingDraft] = useState<
+    import('@/lib/hooks/use-engagement-draft').EngagementDraft | null | undefined
+  >(undefined);
+
+  // ── Clone prefill ────────────────────────────────────────────────────────────
+
+  /**
+   * clonedFrom is set once the source engagement has been fetched and its
+   * fields applied. We store the source ID so the banner can show it.
+   * null  = no clone in progress or clone already applied.
+   */
+  const [clonedFrom, setClonedFrom] = useState<string | null>(null);
+  const [cloneLoading, setCloneLoading] = useState(false);
+  const cloneFetched = useRef(false);
+
+  useEffect(() => {
+    if (!cloneFromId || cloneFetched.current) return;
+    cloneFetched.current = true;
+    setCloneLoading(true);
+    engagementsApi.get(cloneFromId)
+      .then((src) => {
+        setJobTitle(src.jobTitle);
+        setJobDescription(src.jobDescription ?? '');
+        setSalaryRange(src.salaryRange ?? '');
+        setLocation(src.location ?? '');
+        setRecruiterAddress(src.recruiterAddress);
+        setArbiterAddress(src.arbiterAddress);
+        // Convert on-chain milestones back to MilestoneInput shape.
+        // Amount (totalUsdc) is intentionally left blank.
+        const clonedMilestones: MilestoneInput[] = src.milestones.map((m) => ({
+          name: m.name,
+          paymentPercent: m.paymentPercent,
+          kind: m.kind === 'Retention' ? 'RETENTION' : 'PLACEMENT',
+          retentionDays: m.retentionDays ?? undefined,
+        }));
+        setMilestones(clonedMilestones);
+        setClonedFrom(src.id);
+        // Suppress draft banner — clone data takes priority
+        setPendingDraft(null);
+      })
+      .catch(() => {
+        // Non-fatal: form just stays at defaults
+      })
+      .finally(() => setCloneLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloneFromId]);
+
+  // On mount, check localStorage for a saved draft once the address is known.
+  // We use a ref-guard so this fires at most once per page load even in
+  // React Strict Mode's double-invoke.
+  // Skip entirely when a cloneFrom param is present — the clone takes priority.
+  const draftChecked = useRef(false);
+  useEffect(() => {
+    if (draftChecked.current || !address || cloneFromId) return;
+    draftChecked.current = true;
+    const saved = draft.load();
+    setPendingDraft(saved); // null ⟹ no banner, non-null ⟹ show banner
+  }, [address, draft, cloneFromId]);
+
+  /** Collect current field values into the shape the hook expects. */
+  const currentDraftValues = () => ({
+    recruiterAddress,
+    arbiterAddress,
+    totalUsdc,
+    jobTitle,
+    jobDescription,
+    salaryRange,
+    location,
+    milestones,
+  });
+
+  /** Called by every field setter so autosave fires on each keystroke. */
+  const autosave = (patch: Partial<ReturnType<typeof currentDraftValues>>) => {
+    // Only autosave once the user has dismissed (or there was never) a pending
+    // draft — otherwise we'd overwrite a draft the user hasn't seen yet.
+    if (pendingDraft !== undefined && pendingDraft !== null) return;
+    draft.save({ ...currentDraftValues(), ...patch });
+  };
+
+  const restoreDraft = () => {
+    if (!pendingDraft) return;
+    setRecruiterAddress(pendingDraft.recruiterAddress);
+    setArbiterAddress(pendingDraft.arbiterAddress);
+    setTotalUsdc(pendingDraft.totalUsdc);
+    setJobTitle(pendingDraft.jobTitle);
+    setJobDescription(pendingDraft.jobDescription);
+    setSalaryRange(pendingDraft.salaryRange);
+    setLocation(pendingDraft.location);
+    setMilestones(pendingDraft.milestones);
+    setPendingDraft(null); // banner gone, autosave now active
+  };
+
+  const discardDraft = () => {
+    draft.discard();
+    setPendingDraft(null); // banner gone, autosave now active
+  };
 
   // ── Derived validation ───────────────────────────────────────────────────────
 
@@ -143,19 +254,36 @@ export default function CreateEngagementPage() {
     .filter((m) => m.kind === 'RETENTION')
     .map((m) => m.retentionDays ?? 30);
 
-  const addMilestone = () =>
-    setMilestones([...milestones, { name: '', paymentPercent: 0, kind: 'PLACEMENT' }]);
+  const addMilestone = () => {
+    const next = [...milestones, { name: '', paymentPercent: 0, kind: 'PLACEMENT' as const }];
+    setMilestones(next);
+    autosave({ milestones: next });
+  };
 
-  const removeMilestone = (i: number) =>
-    setMilestones(milestones.filter((_, idx) => idx !== i));
+  const removeMilestone = (i: number) => {
+    const next = milestones.filter((_, idx) => idx !== i);
+    setMilestones(next);
+    autosave({ milestones: next });
+  };
 
-  const update = (i: number, field: keyof MilestoneInput, value: any) =>
-    setMilestones(milestones.map((m, idx) => idx === i ? { ...m, [field]: value } : m));
+  const update = (i: number, field: keyof MilestoneInput, value: any) => {
+    const next = milestones.map((m, idx) => idx === i ? { ...m, [field]: value } : m);
+    setMilestones(next);
+    autosave({ milestones: next });
+  };
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
+  // ── Submit / confirm ────────────────────────────────────────────────────────
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  /** Called when the form's submit button is clicked — advances to the review step. */
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!address || !formIsValid) return;
+    setSubmitError(null);
+    setStep('review');
+  };
+
+  /** Called from the review step — actually invokes Freighter and the backend. */
+  const handleConfirm = async () => {
     if (!address || !formIsValid) return;
     setSubmitError(null);
     setLoading(true);
@@ -192,8 +320,11 @@ export default function CreateEngagementPage() {
       });
 
       router.push(`/dashboard/engagements/${engagementId}`);
+      draft.discard();
     } catch (err: any) {
       setSubmitError(err?.message ?? 'Transaction failed. Please try again.');
+      // Drop back to the review step so the user sees the error and can retry.
+      setStep('review');
     } finally {
       setLoading(false);
       setTxStep('');
@@ -201,6 +332,160 @@ export default function CreateEngagementPage() {
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
+
+  // Per-milestone USDC amounts, computed for the review screen.
+  const totalUsdcNum = parseFloat(totalUsdc) || 0;
+  const milestoneUsdcAmounts = milestones.map((m) =>
+    ((totalUsdcNum * (Number(m.paymentPercent) || 0)) / 100).toFixed(2),
+  );
+
+  if (step === 'review') {
+    return (
+      <div className="max-w-2xl">
+        {/* Back link */}
+        <button
+          type="button"
+          onClick={() => { setStep('form'); setSubmitError(null); }}
+          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-5 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to form
+        </button>
+
+        {/* Heading */}
+        <div className="flex items-center gap-3 mb-1">
+          <ShieldCheck className="w-5 h-5 text-brand-600" />
+          <h1 className="text-xl font-semibold text-gray-900">Review engagement</h1>
+        </div>
+        <p className="text-sm text-gray-500 mb-6">
+          Check every detail before Freighter signs the transaction. This action is irreversible.
+        </p>
+
+        {/* Error (from a failed confirm attempt) */}
+        {submitError && (
+          <div className="mb-5 p-4 rounded-xl bg-red-50 border border-red-100 flex gap-3">
+            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">{submitError}</p>
+          </div>
+        )}
+
+        <div className="space-y-5">
+
+          {/* ── Amount highlight ── */}
+          <div className="card p-5 border border-brand-200 bg-brand-50/40">
+            <p className="text-xs text-brand-700 font-medium uppercase tracking-wide mb-1">
+              Total leaving your wallet
+            </p>
+            <p className="text-3xl font-bold text-brand-800">
+              ${parseFloat(totalUsdc).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="text-base font-semibold text-brand-600 ml-1.5">USDC</span>
+            </p>
+            <p className="text-xs text-brand-600 mt-1">
+              Locked in Soroban escrow — released only as milestones are confirmed.
+            </p>
+          </div>
+
+          {/* ── Job details ── */}
+          <div className="card p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Briefcase className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900">Job details</h2>
+            </div>
+            <dl className="space-y-2.5">
+              <ReviewRow label="Engagement ID" value={<span className="font-mono text-xs">{engagementId}</span>} />
+              <ReviewRow label="Job title"     value={jobTitle} />
+              {salaryRange    && <ReviewRow label="Salary range" value={salaryRange} />}
+              {location       && <ReviewRow label="Location"     value={location} />}
+              {jobDescription && <ReviewRow label="Description"  value={<span className="whitespace-pre-wrap">{jobDescription}</span>} />}
+            </dl>
+          </div>
+
+          {/* ── Parties ── */}
+          <div className="card p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <User className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900">Parties</h2>
+            </div>
+            <dl className="space-y-2.5">
+              <ReviewRow label="Company (you)" value={<span className="font-mono text-xs break-all">{address}</span>} />
+              <ReviewRow label="Recruiter"     value={<span className="font-mono text-xs break-all">{recruiterAddress}</span>} />
+              <ReviewRow label="Arbiter"       value={<span className="font-mono text-xs break-all">{arbiterAddress}</span>} />
+            </dl>
+          </div>
+
+          {/* ── Milestones ── */}
+          <div className="card p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Layers className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900">Fee milestones</h2>
+            </div>
+            <div className="space-y-2">
+              {milestones.map((m, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${
+                      m.kind === 'PLACEMENT' ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {i + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{m.name || <span className="italic text-gray-400">Unnamed</span>}</p>
+                      <p className="text-xs text-gray-400">
+                        {m.kind === 'PLACEMENT' ? 'Placement' : `Retention · ${m.retentionDays ?? 30}d`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold text-gray-900">${milestoneUsdcAmounts[i]} USDC</p>
+                    <p className="text-xs text-gray-400">{m.paymentPercent}%</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Totals row */}
+            <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-gray-100 px-1">
+              <span className="text-xs font-medium text-gray-500">Total</span>
+              <span className="text-sm font-bold text-gray-900">
+                ${parseFloat(totalUsdc).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+              </span>
+            </div>
+          </div>
+
+          {/* ── Actions ── */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => { setStep('form'); setSubmitError(null); }}
+              className="btn-secondary min-h-[44px] flex items-center justify-center"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleConfirm}
+              className="btn-primary flex-1"
+            >
+              {loading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />{txStep || 'Processing…'}</>
+              ) : (
+                <><ShieldCheck className="w-4 h-4" />Confirm &amp; sign</>
+              )}
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-400 text-center">
+            This will open Freighter to sign the transaction. The recruiter fee will be locked in the contract until milestones are confirmed.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl">
@@ -222,6 +507,65 @@ export default function CreateEngagementPage() {
         </div>
       )}
 
+      {/* ── Clone banner ── */}
+      {cloneLoading && (
+        <div className="mb-5 p-4 rounded-xl bg-sky-50 border border-sky-200 flex items-center gap-3">
+          <Loader2 className="w-4 h-4 text-sky-500 animate-spin flex-shrink-0" />
+          <p className="text-sm text-sky-800">Loading engagement to clone…</p>
+        </div>
+      )}
+      {clonedFrom && !cloneLoading && (
+        <div className="mb-5 p-4 rounded-xl bg-sky-50 border border-sky-200 flex items-start gap-3">
+          <Copy className="w-4 h-4 text-sky-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-sky-900">Cloned from <span className="font-mono">{clonedFrom}</span></p>
+            <p className="text-xs text-sky-700 mt-0.5">
+              Parties and milestones have been copied. Enter a new fee amount to continue.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setClonedFrom(null)}
+            className="text-sky-400 hover:text-sky-600 transition-colors flex-shrink-0"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ── Draft restore banner ── */}
+      {pendingDraft && (
+        <div className="mb-5 p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+          <RotateCcw className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-900">You have an unsaved draft</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Last saved {new Date(pendingDraft.savedAt).toLocaleString()}.
+              Restore it to continue where you left off.
+            </p>
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={restoreDraft}
+                className="btn-primary text-xs"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Restore draft
+              </button>
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="btn-ghost text-xs"
+              >
+                <X className="w-3.5 h-3.5" />
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
 
         {/* ── Job details ── */}
@@ -238,26 +582,29 @@ export default function CreateEngagementPage() {
             <div>
               <label className="label">Job title <span className="text-red-500">*</span></label>
               <input placeholder="e.g. Senior Software Engineer" value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)} required className="input" />
+                onChange={(e) => { setJobTitle(e.target.value); autosave({ jobTitle: e.target.value }); }}
+                required className="input" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Salary range</label>
                 <input placeholder="$120k – $160k" value={salaryRange}
-                  onChange={(e) => setSalaryRange(e.target.value)} className="input" />
+                  onChange={(e) => { setSalaryRange(e.target.value); autosave({ salaryRange: e.target.value }); }}
+                  className="input" />
               </div>
               <div>
                 <label className="label">Location</label>
                 <input placeholder="Remote / New York" value={location}
-                  onChange={(e) => setLocation(e.target.value)} className="input" />
+                  onChange={(e) => { setLocation(e.target.value); autosave({ location: e.target.value }); }}
+                  className="input" />
               </div>
             </div>
 
             <div>
               <label className="label">Description (optional)</label>
               <textarea placeholder="Role summary…" value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
+                onChange={(e) => { setJobDescription(e.target.value); autosave({ jobDescription: e.target.value }); }}
                 rows={3} className="input resize-none" />
             </div>
 
@@ -269,7 +616,7 @@ export default function CreateEngagementPage() {
                 step="any"
                 placeholder="e.g. 10000"
                 value={totalUsdc}
-                onChange={(e) => setTotalUsdc(e.target.value)}
+                onChange={(e) => { setTotalUsdc(e.target.value); autosave({ totalUsdc: e.target.value }); }}
                 aria-invalid={amountErr !== null}
                 className={`input ${amountErr ? 'border-red-400 focus:ring-red-300' : ''}`}
               />
@@ -293,7 +640,7 @@ export default function CreateEngagementPage() {
               <input
                 placeholder="G..."
                 value={recruiterAddress}
-                onChange={(e) => setRecruiterAddress(e.target.value)}
+                onChange={(e) => { setRecruiterAddress(e.target.value); autosave({ recruiterAddress: e.target.value }); }}
                 aria-invalid={!!(recruiterError || uniquenessErrors.recruiter)}
                 className={`input font-mono text-xs ${
                   (recruiterError || uniquenessErrors.recruiter) ? 'border-red-400 focus:ring-red-300' : ''
@@ -308,7 +655,7 @@ export default function CreateEngagementPage() {
               <input
                 placeholder="G..."
                 value={arbiterAddress}
-                onChange={(e) => setArbiterAddress(e.target.value)}
+                onChange={(e) => { setArbiterAddress(e.target.value); autosave({ arbiterAddress: e.target.value }); }}
                 aria-invalid={!!(arbiterError || uniquenessErrors.arbiter)}
                 className={`input font-mono text-xs ${
                   (arbiterError || uniquenessErrors.arbiter) ? 'border-red-400 focus:ring-red-300' : ''
@@ -441,21 +788,21 @@ export default function CreateEngagementPage() {
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin" />{txStep || 'Processing…'}</>
             ) : (
-              'Sign & lock fee in escrow'
+              <><ChevronRight className="w-4 h-4" />Review &amp; sign</>
             )}
           </button>
           <Link href="/dashboard/engagements" className="btn-secondary text-center min-h-[44px] flex items-center justify-center">Cancel</Link>
         </div>
 
         <p className="text-xs text-gray-400 text-center">
-          This will open Freighter to sign the transaction. The recruiter fee will be locked in the contract until milestones are confirmed.
+          You&apos;ll review the details before Freighter is opened to sign.
         </p>
       </form>
     </div>
   );
 }
 
-// ── Small helper component ─────────────────────────────────────────────────────
+// ── Small helper components ────────────────────────────────────────────────────
 
 function FieldError({ message }: { message: string }) {
   return (
@@ -463,5 +810,14 @@ function FieldError({ message }: { message: string }) {
       <AlertCircle className="w-3 h-3 flex-shrink-0" />
       {message}
     </p>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <dt className="text-xs text-gray-400 flex-shrink-0 w-32">{label}</dt>
+      <dd className="text-xs text-gray-900 text-right min-w-0">{value}</dd>
+    </div>
   );
 }

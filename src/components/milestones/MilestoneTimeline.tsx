@@ -295,6 +295,9 @@ function MilestoneRow({
   const [timer, setTimer]                   = useState<RetentionTimer | null>(null);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason]       = useState('');
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [resolveApprove, setResolveApprove]     = useState(true);
+  const [rationale, setRationale]               = useState('');
 
   // tx progress modal
   const { state: txState, open: openTx, reset: resetTx, onStatus, resumeCheck } = useTxProgress();
@@ -448,6 +451,14 @@ function MilestoneRow({
               </div>
             )}
 
+            {/* Resolution rationale (visible to all parties after resolution) */}
+            {milestone.status === 'Resolved' && milestone.resolutionRationale && (
+              <div className="mb-2 rounded-md border border-purple-100 bg-purple-50 p-2">
+                <p className="text-xs font-medium text-purple-700 mb-0.5">Arbiter rationale</p>
+                <p className="text-xs text-purple-900 whitespace-pre-wrap">{milestone.resolutionRationale}</p>
+              </div>
+            )}
+
             {/* Payment released */}
             {milestone.paymentReleased && (
               <p className="text-xs text-green-600 font-medium mb-2">
@@ -561,24 +572,14 @@ function MilestoneRow({
               {canResolve && !loading && (
                 <>
                   <button
-                    onClick={() => wrap(() => resolveDispute({
-                      callerAddress: address!,
-                      engagementId: engagement.id,
-                      milestoneIndex: milestone.milestoneIndex,
-                      approve: true,
-                    }, onStatus))}
+                    onClick={() => { setResolveApprove(true); setShowResolveModal(true); }}
                     className="btn-primary text-xs"
                   >
                     <ThumbsUp className="w-3.5 h-3.5" />
                     Approve — release payment
                   </button>
                   <button
-                    onClick={() => wrap(() => resolveDispute({
-                      callerAddress: address!,
-                      engagementId: engagement.id,
-                      milestoneIndex: milestone.milestoneIndex,
-                      approve: false,
-                    }, onStatus))}
+                    onClick={() => { setResolveApprove(false); setShowResolveModal(true); }}
                     className="btn-danger text-xs"
                   >
                     <ThumbsDown className="w-3.5 h-3.5" />
@@ -641,11 +642,78 @@ function MilestoneRow({
           </div>
         </div>
       )}
+
+      {/* Resolution rationale modal (arbiter) */}
+      {showResolveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">
+              {resolveApprove ? 'Approve milestone' : 'Reject milestone'}
+            </h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Provide a written rationale for your decision on &ldquo;{milestone.name}&rdquo;.
+              Both parties will see this explanation.
+            </p>
+            <textarea
+              value={rationale}
+              onChange={(e) => setRationale(e.target.value)}
+              rows={4}
+              required
+              minLength={MIN_RATIONALE}
+              placeholder="Explain your reasoning for this resolution decision…"
+              className="input w-full text-xs"
+            />
+            <p className={cn(
+              'text-xs mt-1',
+              rationale.trim().length < MIN_RATIONALE ? 'text-gray-400' : 'text-green-600',
+            )}>
+              {rationale.trim().length}/{MIN_RATIONALE} characters minimum
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => { setShowResolveModal(false); setRationale(''); }}
+                className="btn-ghost text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={rationale.trim().length < MIN_RATIONALE}
+                onClick={() => {
+                  const text = rationale.trim();
+                  const approve = resolveApprove;
+                  setShowResolveModal(false);
+                  wrap(async () => {
+                    await resolveDispute({
+                      callerAddress: address!,
+                      engagementId: engagement.id,
+                      milestoneIndex: milestone.milestoneIndex,
+                      approve,
+                    }, onStatus);
+                    await milestonesApi.submitResolutionRationale(
+                      engagement.id,
+                      milestone.milestoneIndex,
+                      text,
+                    );
+                    setRationale('');
+                  });
+                }}
+                className={cn('text-xs disabled:opacity-50', resolveApprove ? 'btn-primary' : 'btn-danger')}
+              >
+                {resolveApprove
+                  ? <><ThumbsUp className="w-3.5 h-3.5" /> Approve &amp; release</>
+                  : <><ThumbsDown className="w-3.5 h-3.5" /> Reject &amp; reset</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
 const MIN_DISPUTE_REASON = 20;
+const MIN_RATIONALE = 20;
 
 // ---------------------------------------------------------------------------
 // CalendarMenu — dropdown for adding a retention unlock reminder
