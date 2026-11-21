@@ -1,0 +1,12 @@
+{
+  "name": "HireSettle",
+  "short_name": "HireSettle",
+  "description": "Milestone-based recruiter fee escrow on Stellar Soroban",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
