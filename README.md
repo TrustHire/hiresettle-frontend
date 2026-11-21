@@ -23,6 +23,10 @@ This is **Repo 3 of 3** in the HireSettle project:
 - **Confirm / dispute** — companies approve or challenge submitted proof
 - **Resolve disputes** — arbiters approve or reject disputed milestones
 - **Request replacement** — companies trigger the replacement clause when a candidate leaves early
+- **Dashboard overview** — track escrow, releases, active engagements, open disputes, and upcoming retention unlocks
+- **Dispute queue** — arbiters review disputed milestones in oldest-first order
+- **Chain events** — browse contract activity, filter by engagement, and open transactions in Stellar Expert
+- **Transaction progress** — follow simulation, signing, submission, and confirmation for on-chain actions
 - **Notifications** — colour-coded feed with retention-window-approaching alerts
 
 ---
@@ -56,6 +60,20 @@ When an engagement's status is `ReplacementRequested`, a prominent amber banner 
 
 ---
 
+## Dispute and Chain Activity
+
+- `/dashboard/disputes` is the role-aware dispute queue. It lists a connected arbiter's open `Disputed` milestones oldest-first and links each row to the engagement detail.
+- `/dashboard/events` is the chain events page. It supports engagement-ID filtering, ledger and transaction-hash display, pagination, and links to Stellar Expert.
+- Engagement detail pages include `ChainEventFeed`, which shows the latest contract events for that engagement.
+
+## Transaction Progress
+
+Soroban actions use `useTxProgress()` with `TxProgressModal`. The modal keeps the user on the five-stage transaction flow (`Simulating` → `Awaiting signature` → `Submitting` → `Confirming` → `Done`) and handles success, errors, retries, network congestion, and pending transaction resume checks.
+
+`ProofSubmitForm` supports backend IPFS pinning through a drag-and-drop or file-picker upload, plus manual `ipfs://` or HTTPS proof links.
+
+---
+
 ## Project Structure
 
 ```
@@ -76,25 +94,34 @@ hiresettle-frontend/
     │   ├── page.tsx                ← Redirect to /dashboard/engagements
     │   ├── providers.tsx           ← Zustand rehydration
     │   ├── auth/login/page.tsx     ← Freighter + Sign-In With Stellar
+    │   ├── notifications/page.tsx  ← Standalone notification page
     │   ├── dashboard/
     │   │   ├── layout.tsx          ← Sidebar + TopBar
+    │   │   ├── page.tsx            ← Role-aware overview + action items
+    │   │   ├── disputes/page.tsx   ← Arbiter dispute queue
+    │   │   ├── events/page.tsx     ← Searchable on-chain event log
+    │   │   ├── notifications/page.tsx ← Dashboard notification feed
     │   │   └── engagements/
     │   │       ├── page.tsx        ← List + role toggle + filters
     │   │       ├── create/page.tsx ← Create form with milestone builder
-    │   │       └── [id]/page.tsx   ← Detail + timeline + actions
-    │   └── notifications/page.tsx  ← Colour-coded notification feed
+    │   │       └── [id]/page.tsx   ← Detail + timeline + chain events
     │
     ├── components/
     │   ├── layout/
     │   │   ├── Sidebar.tsx         ← Nav + role display
-    │   │   └── TopBar.tsx          ← Network badge + notifications bell
+    │   │   ├── TopBar.tsx          ← Network badge + notifications bell
+    │   │   └── MobileSidebarContext.tsx ← Mobile navigation state
     │   ├── engagements/
-    │   │   ├── EngagementCard.tsx   ← List item card
+    │   │   ├── ChainEventFeed.tsx  ← Engagement on-chain activity feed
+    │   │   ├── EngagementCard.tsx  ← List item card
     │   │   ├── EngagementProgress.tsx ← USDC stats + progress bar
-    │   │   ├── EngagementMeta.tsx   ← Addresses + off-chain metadata
+    │   │   ├── EngagementMeta.tsx  ← Addresses + off-chain metadata
     │   │   └── ReplacementBanner.tsx ← Replacement clause banner
-    │   └── milestones/
-    │       └── MilestoneTimeline.tsx ← Full interactive timeline with retention timers
+    │   ├── milestones/
+    │   │   ├── MilestoneTimeline.tsx ← Interactive timeline + retention timers
+    │   │   └── ProofSubmitForm.tsx ← IPFS upload or manual proof hash entry
+    │   └── ui/
+    │       └── TxProgressModal.tsx ← Transaction steps, errors, retry, and pending state
     │
     ├── lib/
     │   ├── stellar/
@@ -104,9 +131,15 @@ hiresettle-frontend/
     │   │   ├── client.ts           ← Axios + JWT interceptor
     │   │   └── services.ts         ← Typed API functions + timer endpoint
     │   ├── hooks/
-    │   │   └── use-auth-store.ts   ← Zustand auth store
+    │   │   ├── use-auth-store.ts   ← Zustand auth store
+    │   │   ├── use-freighter-watcher.ts ← Wallet/network mismatch watcher
+    │   │   ├── use-notifications.ts ← Polling notification state
+    │   │   └── use-tx-progress.ts  ← Transaction modal state machine
     │   └── utils/
-    │       └── index.ts            ← Formatting + retention timer helpers
+    │       ├── calendar.ts         ← Calendar/date helpers
+    │       ├── index.test.ts       ← Utility unit tests
+    │       ├── index.ts            ← Formatting + retention timer helpers
+    │       └── toast-error.ts      ← Human-readable API errors
     │
     ├── types/index.ts              ← All TypeScript types
     └── styles/globals.css          ← Tailwind + HireSettle design tokens
@@ -166,6 +199,27 @@ npm run dev                   # → http://localhost:3001
 ```
 
 Install [Freighter](https://freighter.app), switch to Testnet, fund a test account at [friendbot.stellar.org](https://friendbot.stellar.org).
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env.local`, then set each value for the target environment.
+
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Base URL for the HireSettle backend REST API, including the API version path. |
+| `NEXT_PUBLIC_STELLAR_NETWORK` | Stellar network used by Freighter and transaction links: `testnet` or `mainnet`. |
+| `NEXT_PUBLIC_CONTRACT_ID` | Soroban contract ID for the HireSettle escrow contract. |
+| `NEXT_PUBLIC_USDC_ADDRESS` | USDC Stellar Asset Contract (SAC) address used when creating engagements. |
+| `NEXT_PUBLIC_STELLAR_RPC_URL` | Soroban RPC endpoint used to prepare, submit, and inspect contract transactions. |
+| `NEXT_PUBLIC_HORIZON_URL` | Horizon endpoint allowed for app requests and Stellar network access. |
+| `NEXT_PUBLIC_LEDGERS_PER_DAY` | Estimated ledgers per day used to convert ledger-based retention periods into UI dates and countdowns. |
+| `NEXT_PUBLIC_IPFS_GATEWAY` | Public IPFS gateway used to preview proof files, with or without a trailing slash. |
+| `IPFS_PINNING_SERVICE` | Server-side proof-pinning provider: `pinata` or `web3storage`. |
+| `IPFS_PINNING_KEY` | Server-side Pinata JWT or Web3.Storage token used to pin uploaded proof files. |
+
+The `NEXT_PUBLIC_*` variables are exposed to browser code. Keep `IPFS_PINNING_KEY` secret: configure the pinning variables on the backend/proxy, not as public client secrets.
 
 ---
 
