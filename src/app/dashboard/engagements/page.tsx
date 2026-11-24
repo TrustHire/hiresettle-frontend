@@ -34,6 +34,14 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 type ViewAs = 'company' | 'recruiter' | 'arbiter';
 
+const STATUS_FILTERS: { value: EngagementStatus | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'Active', label: 'Active' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'ReplacementRequested', label: 'Replacement requested' },
+  { value: 'Cancelled', label: 'Cancelled' },
+];
+
 export default function EngagementsPage() {
   return (
     <Suspense
@@ -173,6 +181,43 @@ function EngagementsContent() {
       .finally(() => setLoading(false));
    }, [address, isHydrated, committedSearch, statusFilter, viewAs, page, sort]);
 
+  // --- Status counts for the filter chips (scoped to the current role view) ---
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (!address) {
+      setCounts({});
+      return;
+    }
+
+    const roleFilter =
+      viewAs === 'company' ? { companyAddress: address } :
+        viewAs === 'recruiter' ? { recruiterAddress: address } :
+          { arbiterAddress: address };
+
+    const statuses: EngagementStatus[] = ['Active', 'Completed', 'ReplacementRequested', 'Cancelled'];
+    let cancelled = false;
+
+    Promise.all(
+      statuses.map((s) =>
+        engagementsApi
+          .list({ ...roleFilter, status: s, page: 1, limit: 1 })
+          .then((res) => res.meta.total),
+      ),
+    )
+      .then((totals) => {
+        if (cancelled) return;
+        const next: Record<string, number> = { all: 0 };
+        statuses.forEach((s, i) => {
+          next[s] = totals[i];
+          next.all += totals[i];
+        });
+        setCounts(next);
+      })
+      .catch(() => { /* leave existing counts on failure */ });
+
+    return () => { cancelled = true; };
+  }, [address, isHydrated, viewAs]);
+
   const isSearching = committedSearch.trim().length > 0;
   useEffect(
     () => () => {
@@ -240,6 +285,7 @@ function EngagementsContent() {
             </button>
           )}
         </div>
+      </div>
 
         {/* Status */}
         <select

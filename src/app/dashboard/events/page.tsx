@@ -4,10 +4,10 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Activity, Search, ChevronLeft, ChevronRight,
-  ExternalLink, AlertTriangle, Loader2,
+  ExternalLink, AlertTriangle, Loader2, Download,
 } from 'lucide-react';
 import { eventsApi } from '@/lib/api/services';
-import { timeAgo, shortAddress } from '@/lib/utils';
+import { timeAgo, shortAddress, downloadChainEventsJson } from '@/lib/utils';
 import type { ChainEvent } from '@/types';
 
 const PAGE_SIZE = 20;
@@ -79,6 +79,15 @@ export default function ChainEventsPage() {
             On-chain activity recorded from the HireSettle contract
           </p>
         </div>
+        {!loading && !error && events.length > 0 && (
+          <button
+            onClick={() => downloadChainEventsJson(events, debouncedSearch || null)}
+            className="btn-secondary text-xs"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download JSON
+          </button>
+        )}
       </div>
 
       {/* Filter bar */}

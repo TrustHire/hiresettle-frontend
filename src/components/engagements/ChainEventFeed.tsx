@@ -43,9 +43,21 @@ export function ChainEventFeed({ events }: Props) {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
+  // Engagement ID for the audit export filename
+  const engagementId = events.find((e) => e.engagementId)?.engagementId ?? null;
+
   return (
     <div className="card p-5">
-      <h2 className="text-sm font-semibold text-gray-900 mb-4">On-chain activity</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold text-gray-900">On-chain activity</h2>
+        <button
+          onClick={() => downloadChainEventsJson(events, engagementId)}
+          className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-brand-600 transition-colors"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Download JSON
+        </button>
+      </div>
 
       <ul className="divide-y divide-gray-50">
         {sorted.map((event) => (

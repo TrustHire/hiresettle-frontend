@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format, formatDistanceToNow } from 'date-fns';
-import type { MilestoneStatus, EngagementStatus } from '@/types';
+import type { MilestoneStatus, EngagementStatus, ChainEvent } from '@/types';
 
 export const LEDGERS_PER_DAY = Number(process.env.NEXT_PUBLIC_LEDGERS_PER_DAY) || 17280;
 
