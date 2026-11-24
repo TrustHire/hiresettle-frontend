@@ -3,6 +3,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
+import { CommandPalette } from '@/components/layout/CommandPalette';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,6 +20,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </div>
       </div>
+      <CommandPalette />
     </MobileSidebarProvider>
   );
 }

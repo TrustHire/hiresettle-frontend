@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Bell, LogOut, Menu, RefreshCw, Wifi, X } from 'lucide-react';
+import { AlertTriangle, Bell, LogOut, Menu, RefreshCw, Search, Wifi, X } from 'lucide-react';
 import { useFreighterWatcher } from '@/lib/hooks/use-freighter-watcher';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useMobileSidebar } from './MobileSidebarContext';
+import { openCommandPalette } from './CommandPalette';
 
 export function TopBar() {
   const { open, setOpen } = useMobileSidebar();
@@ -99,6 +100,19 @@ export function TopBar() {
           <Menu className="w-5 h-5" aria-hidden="true" />
         </button>
         <div className="flex items-center gap-3">
+          {/* Command palette trigger — also opens with Cmd/Ctrl+K */}
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            className="inline-flex items-center gap-2 text-xs text-gray-500 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+            aria-label="Search (Ctrl+K)"
+            aria-keyshortcuts="Meta+K Control+K"
+          >
+            <Search className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Search</span>
+            <kbd className="hidden sm:inline text-[10px] font-sans text-gray-400">⌘K</kbd>
+          </button>
+
           {/* Network badge — turns red with a refresh icon when mismatched */}
           <span
             className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg ${
