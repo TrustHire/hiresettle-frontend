@@ -9,7 +9,7 @@ import type { User } from '@/types';
  * Decode the `exp` claim from a JWT without verifying the signature.
  * Returns the expiry timestamp in seconds, or null when it cannot be read.
  */
-function getJwtExp(token: string): number | null {
+export function getJwtExp(token: string): number | null {
   try {
     const payload = token.split('.')[1];
     if (!payload) return null;

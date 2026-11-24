@@ -1,17 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, RefreshCw, Loader2, AlertTriangle, Copy } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, RefreshCw, Loader2, AlertTriangle, Copy, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import axios from 'axios';
 import { engagementsApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
+import { engagementKeys, timerKeys } from '@/lib/query-keys';
 import { MilestoneTimeline } from '@/components/milestones/MilestoneTimeline';
 import { EngagementMeta } from '@/components/engagements/EngagementMeta';
 import { EngagementProgress } from '@/components/engagements/EngagementProgress';
 import { ReplacementBanner } from '@/components/engagements/ReplacementBanner';
 import { ChainEventFeed } from '@/components/engagements/ChainEventFeed';
+import { ShareEngagementModal } from '@/components/engagements/ShareEngagementModal';
 import {
   engagementStatusBadge,
   engagementStatusLabel,
@@ -23,9 +26,9 @@ export default function EngagementDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { address } = useAuthStore();
   const router = useRouter();
-  const [engagement, setEngagement] = useState<Engagement | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const engagementQuery = useQuery({
     queryKey: engagementKeys.detail(id),
     queryFn: () => engagementsApi.get(id),
@@ -184,6 +187,14 @@ export default function EngagementDetailPage() {
             </button>
           )}
           <button
+            onClick={() => setShareOpen(true)}
+            className="btn-secondary text-xs"
+            title="Share a link or QR code for this engagement"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Share
+          </button>
+          <button
             onClick={handleSync}
             disabled={syncing}
             className="btn-secondary text-xs"
@@ -193,6 +204,12 @@ export default function EngagementDetailPage() {
           </button>
         </div>
       </div>
+
+      <ShareEngagementModal
+        engagementId={engagement.id}
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+      />
 
       {/* Replacement banner */}
       {engagement.status === "ReplacementRequested" && (
