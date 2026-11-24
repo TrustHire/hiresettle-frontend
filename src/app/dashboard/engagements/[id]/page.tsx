@@ -12,6 +12,7 @@ import { EngagementMeta } from '@/components/engagements/EngagementMeta';
 import { EngagementProgress } from '@/components/engagements/EngagementProgress';
 import { ReplacementBanner } from '@/components/engagements/ReplacementBanner';
 import { ChainEventFeed } from '@/components/engagements/ChainEventFeed';
+import { EngagementDetailSkeleton } from '@/components/ui/Skeleton';
 import {
   engagementStatusBadge,
   engagementStatusLabel,
@@ -61,12 +62,7 @@ export default function EngagementDetailPage() {
     }
   };
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
-      </div>
-    );
+  if (loading) return <EngagementDetailSkeleton />;
 
   if (notFound)
     return (

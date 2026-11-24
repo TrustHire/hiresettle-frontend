@@ -8,6 +8,8 @@ import { connectFreighter, isFreighterInstalled, signNonce } from '@/lib/stellar
 import { authApi } from '@/lib/api/services';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { Networks } from '@stellar/stellar-sdk';
+import { useTranslations } from '@/lib/i18n';
+import { LanguageSwitcher } from '@/components/layout/LanguageSwitcher';
 
 type Step = 'idle' | 'connecting' | 'signing' | 'verifying' | 'done';
 
@@ -22,6 +24,7 @@ export default function LoginPage() {
 function LoginContent() {
   const router = useRouter();
   const params = useSearchParams();
+  const t = useTranslations();
   const callbackUrl = params.get('callbackUrl') ?? '/dashboard/engagements';
 
   const { setAuth, isConnected } = useAuthStore();
@@ -58,17 +61,17 @@ function LoginContent() {
       setStep('done');
       router.replace(callbackUrl);
     } catch (err: any) {
-      setError(err?.message ?? 'Connection failed. Please try again.');
+      setError(err?.message ?? t('login.connectionFailed'));
       setStep('idle');
     }
   };
 
   const stepLabel: Record<Step, string> = {
-    idle: 'Connect Freighter Wallet',
-    connecting: 'Requesting wallet access…',
-    signing: 'Sign the message in Freighter…',
-    verifying: 'Verifying with server…',
-    done: 'Redirecting…',
+    idle: t('login.steps.idle'),
+    connecting: t('login.steps.connecting'),
+    signing: t('login.steps.signing'),
+    verifying: t('login.steps.verifying'),
+    done: t('login.steps.done'),
   };
 
   const isLoading = step !== 'idle';
@@ -76,6 +79,9 @@ function LoginContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
+        <div className="flex justify-end mb-2">
+          <LanguageSwitcher className="w-auto" />
+        </div>
 
         {/* Logo */}
         <div className="text-center mb-8">
@@ -83,26 +89,23 @@ function LoginContent() {
             <ShieldCheck className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-semibold text-gray-900">HireSettle</h1>
-          <p className="text-sm text-gray-500 mt-1">Recruiter fee escrow on Stellar</p>
+          <p className="text-sm text-gray-500 mt-1">{t('login.tagline')}</p>
         </div>
 
         {/* Card */}
         <div className="card p-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Sign in</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Connect your Freighter wallet to access your engagements.
-            No password needed — your Stellar address is your identity.
-          </p>
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">{t('login.title')}</h2>
+          <p className="text-sm text-gray-500 mb-6">{t('login.intro')}</p>
 
           {hasFreighter === false && (
             <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-100">
-              <p className="text-sm text-amber-800 font-medium mb-2">Freighter not found</p>
-              <p className="text-xs text-amber-700 mb-3">
-                Install the Freighter browser extension to connect your Stellar wallet.
+              <p className="text-sm text-amber-800 font-medium mb-2">
+                {t('login.freighterMissing.title')}
               </p>
+              <p className="text-xs text-amber-700 mb-3">{t('login.freighterMissing.body')}</p>
               <a href="https://freighter.app" target="_blank" rel="noreferrer"
                 className="btn-primary text-xs px-3 py-1.5">
-                Install Freighter →
+                {t('login.freighterMissing.install')}
               </a>
             </div>
           )}
@@ -151,14 +154,14 @@ function LoginContent() {
         {/* Features */}
         <div className="mt-6 grid grid-cols-3 gap-3 text-center">
           {[
-            { icon: DollarSign, label: 'Fee protection', sub: 'Locked in escrow' },
-            { icon: Clock, label: 'Retention timers', sub: 'Auto-unlock at 30/90d' },
-            { icon: ShieldCheck, label: 'No trust needed', sub: 'Contract enforces rules' },
-          ].map(({ icon: Icon, label, sub }) => (
-            <div key={label} className="card p-3">
+            { icon: DollarSign, key: 'feeProtection' },
+            { icon: Clock, key: 'retentionTimers' },
+            { icon: ShieldCheck, key: 'noTrust' },
+          ].map(({ icon: Icon, key }) => (
+            <div key={key} className="card p-3">
               <Icon className="w-4 h-4 text-brand-600 mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-gray-700">{label}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
+              <p className="text-xs font-medium text-gray-700">{t(`login.features.${key}.label`)}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{t(`login.features.${key}.sub`)}</p>
             </div>
           ))}
         </div>

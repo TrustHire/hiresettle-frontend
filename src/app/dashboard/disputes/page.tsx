@@ -2,11 +2,12 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { Scale, Loader2, Clock, Briefcase } from "lucide-react";
+import { Scale, Clock, Briefcase } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { engagementsApi } from "@/lib/api/services";
 import { useAuthStore } from "@/lib/hooks/use-auth-store";
 import { engagementKeys } from "@/lib/query-keys";
+import { DisputeListSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { timeAgo, shortAddress } from "@/lib/utils";
 import type { Engagement, Milestone } from "@/types";
 
@@ -46,16 +47,16 @@ export default function DisputesPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-gray-900">Dispute queue</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          {loading
-            ? "Loading…"
-            : `${rows.length} open dispute${rows.length !== 1 ? "s" : ""} awaiting review`}
+          {loading ? (
+            <Skeleton className="inline-block w-48 h-3 align-middle" />
+          ) : (
+            `${rows.length} open dispute${rows.length !== 1 ? "s" : ""} awaiting review`
+          )}
         </p>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
-        </div>
+        <DisputeListSkeleton />
       ) : disputesQuery.isError ? (
         <div className="card p-8 text-center">
           <p className="text-sm text-red-600">Failed to load disputes.</p>

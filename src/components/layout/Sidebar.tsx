@@ -6,20 +6,26 @@ import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Briefcase, Bell, Activity, LogOut, Scale, ShieldCheck, X } from 'lucide-react';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { shortAddress, cn } from '@/lib/utils';
+import { useTranslations } from '@/lib/i18n';
 import { useMobileSidebar } from './MobileSidebarContext';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
+// `labelKey` is a message key under `sidebar.nav` in src/messages/<locale>.json
 const NAV_ITEMS = [
-  { href: '/dashboard',             label: 'Overview',      icon: LayoutDashboard },
-  { href: '/dashboard/engagements', label: 'Engagements', icon: Briefcase },
-  { href: '/dashboard/disputes',    label: 'Disputes',     icon: Scale     },
-  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
-  { href: '/dashboard/events',      label: 'Chain Events',  icon: Activity },
+  { href: '/dashboard',               labelKey: 'overview',      icon: LayoutDashboard },
+  { href: '/dashboard/engagements',   labelKey: 'engagements',   icon: Briefcase },
+  { href: '/dashboard/disputes',      labelKey: 'disputes',      icon: Scale     },
+  { href: '/dashboard/notifications', labelKey: 'notifications', icon: Bell },
+  { href: '/dashboard/events',        labelKey: 'events',        icon: Activity },
 ];
+
+const ROLES = ['COMPANY', 'RECRUITER', 'ARBITER', 'ADMIN'];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { address, user, logout } = useAuthStore();
   const { open, setOpen } = useMobileSidebar();
+  const t = useTranslations();
 
   useEffect(() => {
     setOpen(false);
@@ -37,7 +43,7 @@ export function Sidebar() {
   }, [open, setOpen]);
 
   const roleLabel = user?.role
-    ? { COMPANY: 'Company', RECRUITER: 'Recruiter', ARBITER: 'Arbiter', ADMIN: 'Admin' }[user.role] ?? user.role
+    ? ROLES.includes(user.role) ? t(`sidebar.roles.${user.role}`) : user.role
     : null;
 
   const sidebarContent = (
@@ -54,7 +60,7 @@ export function Sidebar() {
         <button
           onClick={() => setOpen(false)}
           className="md:hidden p-2 rounded-xl text-gray-400 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-          aria-label="Close menu"
+          aria-label={t('sidebar.closeMenu')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -62,7 +68,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
           // Overview route: exact match only to avoid highlighting on every sub-page
           const active = href === '/dashboard'
             ? pathname === '/dashboard'
@@ -80,7 +86,7 @@ export function Sidebar() {
               )}
             >
               <Icon className={cn('w-4 h-4', active ? 'text-brand-600' : 'text-gray-400')} />
-              {label}
+              {t(`sidebar.nav.${labelKey}`)}
             </Link>
           );
         })}
@@ -96,19 +102,20 @@ export function Sidebar() {
           </div>
           <div className="min-w-0">
             <p className="text-xs font-medium text-gray-900 truncate">
-              {address ? shortAddress(address) : 'Not connected'}
+              {address ? shortAddress(address) : t('sidebar.notConnected')}
             </p>
             <p className="text-[10px] text-gray-400">
-              {roleLabel ?? 'Stellar Testnet'}
+              {roleLabel ?? t('sidebar.stellarTestnet')}
             </p>
           </div>
         </div>
+        <LanguageSwitcher className="mb-1 min-h-[44px]" />
         <button
           onClick={logout}
           className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-gray-50 hover:text-red-600 transition-colors min-h-[44px]"
         >
           <LogOut className="w-4 h-4" />
-          Sign out
+          {t('sidebar.signOut')}
         </button>
       </div>
     </>
