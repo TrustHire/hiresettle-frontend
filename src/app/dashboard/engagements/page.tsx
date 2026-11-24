@@ -11,12 +11,17 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { engagementsApi } from "@/lib/api/services";
 import { useAuthStore } from "@/lib/hooks/use-auth-store";
 import { EngagementCard } from "@/components/engagements/EngagementCard";
 import { engagementKeys } from "@/lib/query-keys";
+import { downloadCsv, engagementsToCsv } from "@/lib/utils";
+import { toReadableError } from "@/lib/utils/toast-error";
 import type { Engagement, EngagementStatus } from "@/types";
 
 const DEBOUNCE_MS = 300;
@@ -150,36 +155,55 @@ function EngagementsContent() {
   }, []);
 
   // --- Data fetch ---
-  useEffect(() => {
-    if (!isHydrated) return;
-    if (!address) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+  const roleFilter =
+    viewAs === 'company' ? { companyAddress: address ?? undefined } :
+      viewAs === 'recruiter' ? { recruiterAddress: address ?? undefined } :
+        { arbiterAddress: address ?? undefined };
 
-    const roleFilter =
-      viewAs === 'company' ? { companyAddress: address } :
-        viewAs === 'recruiter' ? { recruiterAddress: address } :
-          { arbiterAddress: address };
+  const filters = {
+    ...roleFilter,
+    status: statusFilter || undefined,
+    search: committedSearch || undefined,
+    page,
+    limit: PAGE_SIZE,
+    sort,
+  };
+  const engagementsQuery = useQuery({
+    queryKey: engagementKeys.list(filters),
+    queryFn: () => engagementsApi.list(filters),
+    enabled: isHydrated && !!address,
+  });
+  const engagements: Engagement[] = engagementsQuery.data?.data ?? [];
+  const total = engagementsQuery.data?.meta.total ?? 0;
+  const totalPages = engagementsQuery.data?.meta.totalPages ?? 1;
+  const loading = !isHydrated || engagementsQuery.isLoading;
 
-    engagementsApi
-      .list({
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  // --- CSV export — fetches every page matching the current role, filters and search ---
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    if (!address || exporting) return;
+    setExporting(true);
+    try {
+      // Same role, status, search and sort as the list — but every page
+      const all = await engagementsApi.listAll({
         ...roleFilter,
-        status: statusFilter || undefined,
-        search: committedSearch || undefined,
-        page,
-        limit: PAGE_SIZE,
+        status: filters.status,
+        search: filters.search,
         sort,
-      })
-      .then((res) => {
-        setEngagements(res.data);
-        setTotal(res.meta.total);
-        setTotalPages(res.meta.totalPages);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-   }, [address, isHydrated, committedSearch, statusFilter, viewAs, page, sort]);
+      });
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadCsv(`engagements-${viewAs}-${stamp}.csv`, engagementsToCsv(all));
+      toast.success(`Exported ${all.length} engagement${all.length !== 1 ? 's' : ''}`);
+    } catch (error) {
+      toast.error(toReadableError(error));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // --- Status counts for the filter chips (scoped to the current role view) ---
   useEffect(() => {
@@ -240,10 +264,24 @@ function EngagementsContent() {
             )}
           </p>
         </div>
-        <Link href="/dashboard/engagements/create" className="btn-primary">
-          <Plus className="w-4 h-4" />
-          New engagement
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting || loading || total === 0}
+            className="btn-secondary"
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Export CSV
+          </button>
+          <Link href="/dashboard/engagements/create" className="btn-primary">
+            <Plus className="w-4 h-4" />
+            New engagement
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -285,7 +323,6 @@ function EngagementsContent() {
             </button>
           )}
         </div>
-      </div>
 
         {/* Status */}
         <select

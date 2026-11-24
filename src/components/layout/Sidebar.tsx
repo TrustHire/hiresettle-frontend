@@ -3,22 +3,35 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Briefcase, Bell, Activity, LogOut, Scale, ShieldCheck, X } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Bell, Activity, LogOut, Scale, ShieldCheck, X, Settings, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { shortAddress, cn } from '@/lib/utils';
 import { useMobileSidebar } from './MobileSidebarContext';
+import type { UserRole } from '@/types';
 
-const NAV_ITEMS = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  /** When set, the link is only shown to these roles. */
+  roles?: UserRole[];
+};
+
+const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard',             label: 'Overview',      icon: LayoutDashboard },
   { href: '/dashboard/engagements', label: 'Engagements', icon: Briefcase },
+  { href: '/dashboard/earnings',    label: 'Earnings',      icon: Wallet, roles: ['RECRUITER'] },
   { href: '/dashboard/disputes',    label: 'Disputes',     icon: Scale     },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
   { href: '/dashboard/events',      label: 'Chain Events',  icon: Activity },
+  { href: '/dashboard/settings',    label: 'Settings',      icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { address, user, logout } = useAuthStore();
+  const { address, logout } = useAuthStore();
+  const { user } = useCurrentUser();
   const { open, setOpen } = useMobileSidebar();
 
   useEffect(() => {
@@ -39,6 +52,8 @@ export function Sidebar() {
   const roleLabel = user?.role
     ? { COMPANY: 'Company', RECRUITER: 'Recruiter', ARBITER: 'Arbiter', ADMIN: 'Admin' }[user.role] ?? user.role
     : null;
+
+  const displayName = user?.name?.trim() || null;
 
   const sidebarContent = (
     <>
@@ -62,7 +77,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.filter(({ roles }) => !roles || (user?.role && roles.includes(user.role))).map(({ href, label, icon: Icon }) => {
           // Overview route: exact match only to avoid highlighting on every sub-page
           const active = href === '/dashboard'
             ? pathname === '/dashboard'
@@ -91,15 +106,17 @@ export function Sidebar() {
         <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gray-50 mb-2">
           <div className="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-semibold text-brand-700">
-              {address?.slice(0, 2) ?? 'G'}
+              {displayName ? displayName.slice(0, 2).toUpperCase() : address?.slice(0, 2) ?? 'G'}
             </span>
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-gray-900 truncate">
-              {address ? shortAddress(address) : 'Not connected'}
+            <p className="text-xs font-medium text-gray-900 truncate" title={displayName ?? address ?? undefined}>
+              {displayName ?? (address ? shortAddress(address) : 'Not connected')}
             </p>
-            <p className="text-[10px] text-gray-400">
-              {roleLabel ?? 'Stellar Testnet'}
+            <p className="text-[10px] text-gray-400 truncate">
+              {displayName && address
+                ? `${shortAddress(address)}${roleLabel ? ` · ${roleLabel}` : ''}`
+                : roleLabel ?? 'Stellar Testnet'}
             </p>
           </div>
         </div>
