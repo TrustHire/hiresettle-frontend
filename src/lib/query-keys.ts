@@ -17,14 +17,8 @@ export const notificationKeys = {
   list: () => [...notificationKeys.all, "list"] as const,
 };
 
-export const userKeys = {
-  all: ["users"] as const,
-  me: (address: string | null) => [...userKeys.all, "me", address] as const,
-};
-
-export const earningsKeys = {
-  all: ["earnings"] as const,
-  recruiter: (address: string) => [...earningsKeys.all, "recruiter", address] as const,
-  payoutEvents: (engagementId: string) =>
-    [...earningsKeys.all, "payout-events", engagementId] as const,
+export const accountKeys = {
+  all: ["stellar-account"] as const,
+  setup: (address: string) => [...accountKeys.all, "setup", address] as const,
+  freighter: () => [...accountKeys.all, "freighter"] as const,
 };

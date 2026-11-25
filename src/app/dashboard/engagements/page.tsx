@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { engagementsApi } from "@/lib/api/services";
 import { useAuthStore } from "@/lib/hooks/use-auth-store";
 import { EngagementCard } from "@/components/engagements/EngagementCard";
+import { EngagementListSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { engagementKeys } from "@/lib/query-keys";
 import { downloadCsv, engagementsToCsv } from "@/lib/utils";
 import { toReadableError } from "@/lib/utils/toast-error";
@@ -50,17 +51,7 @@ const STATUS_FILTERS: { value: EngagementStatus | ''; label: string }[] = [
 export default function EngagementsPage() {
   return (
     <Suspense
-      fallback={
-        <div className="space-y-3">
-          {Array.from({ length: PAGE_SIZE / 2 }).map((_, index) => (
-            <div key={index} className="card p-5 animate-pulse">
-              <div className="h-4 bg-gray-100 rounded w-48 mb-3" />
-              <div className="h-3 bg-gray-100 rounded w-64 mb-2" />
-              <div className="h-3 bg-gray-100 rounded w-40" />
-            </div>
-          ))}
-        </div>
-      }
+      fallback={<EngagementListSkeleton count={PAGE_SIZE / 2} />}
     >
       <EngagementsContent />
     </Suspense>
@@ -258,7 +249,7 @@ function EngagementsContent() {
           <h1 className="text-xl font-semibold text-gray-900">Engagements</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {loading ? (
-              <span className="inline-block w-24 h-3 bg-gray-100 rounded animate-pulse" />
+              <Skeleton className="inline-block w-24 h-3 align-middle" />
             ) : (
               `${total} engagement${total !== 1 ? "s" : ""} found`
             )}
@@ -353,15 +344,7 @@ function EngagementsContent() {
 
       {/* List */}
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: PAGE_SIZE / 2 }).map((_, i) => (
-            <div key={i} className="card p-5 animate-pulse">
-              <div className="h-4 bg-gray-100 rounded w-48 mb-3" />
-              <div className="h-3 bg-gray-100 rounded w-64 mb-2" />
-              <div className="h-3 bg-gray-100 rounded w-40" />
-            </div>
-          ))}
-        </div>
+        <EngagementListSkeleton count={PAGE_SIZE / 2} />
       ) : engagementsQuery.isError ? (
         <div className="card p-8 text-center">
           <p className="text-sm text-red-600">Failed to load engagements.</p>

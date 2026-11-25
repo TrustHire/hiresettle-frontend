@@ -98,3 +98,18 @@ export function watchWallet(
   const interval = setInterval(checkWallet, 3000);
   return () => clearInterval(interval);
 }
+
+/**
+ * The network name Freighter reports for the network this app is configured
+ * for. Freighter uses "PUBLIC" for mainnet and "TESTNET" for testnet.
+ */
+export function expectedFreighterNetwork(): string {
+  return process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'public' : 'testnet';
+}
+
+/** True when a (raw or normalised) Freighter network matches the app's network. */
+export function isExpectedNetwork(network: string): boolean {
+  const n = normalizeNetwork(network);
+  const expected = expectedFreighterNetwork();
+  return n === expected || (expected === 'public' && n === 'mainnet');
+}
