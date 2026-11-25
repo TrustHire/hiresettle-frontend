@@ -11,12 +11,18 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { engagementsApi } from "@/lib/api/services";
 import { useAuthStore } from "@/lib/hooks/use-auth-store";
 import { EngagementCard } from "@/components/engagements/EngagementCard";
+import { EngagementListSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { engagementKeys } from "@/lib/query-keys";
+import { downloadCsv, engagementsToCsv } from "@/lib/utils";
+import { toReadableError } from "@/lib/utils/toast-error";
 import type { Engagement, EngagementStatus } from "@/types";
 
 const DEBOUNCE_MS = 300;
@@ -45,17 +51,7 @@ const STATUS_FILTERS: { value: EngagementStatus | ''; label: string }[] = [
 export default function EngagementsPage() {
   return (
     <Suspense
-      fallback={
-        <div className="space-y-3">
-          {Array.from({ length: PAGE_SIZE / 2 }).map((_, index) => (
-            <div key={index} className="card p-5 animate-pulse">
-              <div className="h-4 bg-gray-100 rounded w-48 mb-3" />
-              <div className="h-3 bg-gray-100 rounded w-64 mb-2" />
-              <div className="h-3 bg-gray-100 rounded w-40" />
-            </div>
-          ))}
-        </div>
-      }
+      fallback={<EngagementListSkeleton count={PAGE_SIZE / 2} />}
     >
       <EngagementsContent />
     </Suspense>
@@ -150,36 +146,55 @@ function EngagementsContent() {
   }, []);
 
   // --- Data fetch ---
-  useEffect(() => {
-    if (!isHydrated) return;
-    if (!address) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+  const roleFilter =
+    viewAs === 'company' ? { companyAddress: address ?? undefined } :
+      viewAs === 'recruiter' ? { recruiterAddress: address ?? undefined } :
+        { arbiterAddress: address ?? undefined };
 
-    const roleFilter =
-      viewAs === 'company' ? { companyAddress: address } :
-        viewAs === 'recruiter' ? { recruiterAddress: address } :
-          { arbiterAddress: address };
+  const filters = {
+    ...roleFilter,
+    status: statusFilter || undefined,
+    search: committedSearch || undefined,
+    page,
+    limit: PAGE_SIZE,
+    sort,
+  };
+  const engagementsQuery = useQuery({
+    queryKey: engagementKeys.list(filters),
+    queryFn: () => engagementsApi.list(filters),
+    enabled: isHydrated && !!address,
+  });
+  const engagements: Engagement[] = engagementsQuery.data?.data ?? [];
+  const total = engagementsQuery.data?.meta.total ?? 0;
+  const totalPages = engagementsQuery.data?.meta.totalPages ?? 1;
+  const loading = !isHydrated || engagementsQuery.isLoading;
 
-    engagementsApi
-      .list({
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  // --- CSV export — fetches every page matching the current role, filters and search ---
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    if (!address || exporting) return;
+    setExporting(true);
+    try {
+      // Same role, status, search and sort as the list — but every page
+      const all = await engagementsApi.listAll({
         ...roleFilter,
-        status: statusFilter || undefined,
-        search: committedSearch || undefined,
-        page,
-        limit: PAGE_SIZE,
+        status: filters.status,
+        search: filters.search,
         sort,
-      })
-      .then((res) => {
-        setEngagements(res.data);
-        setTotal(res.meta.total);
-        setTotalPages(res.meta.totalPages);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-   }, [address, isHydrated, committedSearch, statusFilter, viewAs, page, sort]);
+      });
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadCsv(`engagements-${viewAs}-${stamp}.csv`, engagementsToCsv(all));
+      toast.success(`Exported ${all.length} engagement${all.length !== 1 ? 's' : ''}`);
+    } catch (error) {
+      toast.error(toReadableError(error));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // --- Status counts for the filter chips (scoped to the current role view) ---
   useEffect(() => {
@@ -234,16 +249,30 @@ function EngagementsContent() {
           <h1 className="text-xl font-semibold text-gray-900">Engagements</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {loading ? (
-              <span className="inline-block w-24 h-3 bg-gray-100 rounded animate-pulse" />
+              <Skeleton className="inline-block w-24 h-3 align-middle" />
             ) : (
               `${total} engagement${total !== 1 ? "s" : ""} found`
             )}
           </p>
         </div>
-        <Link href="/dashboard/engagements/create" className="btn-primary">
-          <Plus className="w-4 h-4" />
-          New engagement
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting || loading || total === 0}
+            className="btn-secondary"
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Export CSV
+          </button>
+          <Link href="/dashboard/engagements/create" className="btn-primary">
+            <Plus className="w-4 h-4" />
+            New engagement
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -285,7 +314,6 @@ function EngagementsContent() {
             </button>
           )}
         </div>
-      </div>
 
         {/* Status */}
         <select
@@ -316,15 +344,7 @@ function EngagementsContent() {
 
       {/* List */}
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: PAGE_SIZE / 2 }).map((_, i) => (
-            <div key={i} className="card p-5 animate-pulse">
-              <div className="h-4 bg-gray-100 rounded w-48 mb-3" />
-              <div className="h-3 bg-gray-100 rounded w-64 mb-2" />
-              <div className="h-3 bg-gray-100 rounded w-40" />
-            </div>
-          ))}
-        </div>
+        <EngagementListSkeleton count={PAGE_SIZE / 2} />
       ) : engagementsQuery.isError ? (
         <div className="card p-8 text-center">
           <p className="text-sm text-red-600">Failed to load engagements.</p>

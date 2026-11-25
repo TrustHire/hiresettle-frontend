@@ -1,0 +1,47 @@
+{
+  "common": {
+    "language": "Language"
+  },
+  "sidebar": {
+    "nav": {
+      "overview": "Overview",
+      "engagements": "Engagements",
+      "disputes": "Disputes",
+      "notifications": "Notifications",
+      "events": "Chain Events"
+    },
+    "closeMenu": "Close menu",
+    "notConnected": "Not connected",
+    "stellarTestnet": "Stellar Testnet",
+    "signOut": "Sign out",
+    "roles": {
+      "COMPANY": "Company",
+      "RECRUITER": "Recruiter",
+      "ARBITER": "Arbiter",
+      "ADMIN": "Admin"
+    }
+  },
+  "login": {
+    "tagline": "Recruiter fee escrow on Stellar",
+    "title": "Sign in",
+    "intro": "Connect your Freighter wallet to access your engagements. No password needed — your Stellar address is your identity.",
+    "freighterMissing": {
+      "title": "Freighter not found",
+      "body": "Install the Freighter browser extension to connect your Stellar wallet.",
+      "install": "Install Freighter →"
+    },
+    "connectionFailed": "Connection failed. Please try again.",
+    "steps": {
+      "idle": "Connect Freighter Wallet",
+      "connecting": "Requesting wallet access…",
+      "signing": "Sign the message in Freighter…",
+      "verifying": "Verifying with server…",
+      "done": "Redirecting…"
+    },
+    "features": {
+      "feeProtection": { "label": "Fee protection", "sub": "Locked in escrow" },
+      "retentionTimers": { "label": "Retention timers", "sub": "Auto-unlock at 30/90d" },
+      "noTrust": { "label": "No trust needed", "sub": "Contract enforces rules" }
+    }
+  }
+}

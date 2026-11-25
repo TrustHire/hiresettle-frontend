@@ -3,7 +3,22 @@ import type {
   ApiResponse, PaginatedResponse,
   Engagement, Milestone, RetentionTimer,
   Notification, User, CreateEngagementInput, ProofMetadata,
+  ChainEvent, UpdateProfileInput,
 } from '@/types';
+
+type EngagementListParams = {
+  companyAddress?: string;
+  recruiterAddress?: string;
+  arbiterAddress?: string;
+  status?: string;
+  search?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+};
+
+/** Page size used when walking every page of a list endpoint. */
+const LIST_ALL_PAGE_SIZE = 100;
 
 // ----------------------------------------------------------
 // Auth
@@ -41,20 +56,28 @@ export const engagementsApi = {
     return data.data;
   },
 
-  list: async (params?: {
-    companyAddress?: string;
-    recruiterAddress?: string;
-    arbiterAddress?: string;
-    status?: string;
-    search?: string;
-    sort?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<PaginatedResponse<Engagement>> => {
+  list: async (params?: EngagementListParams): Promise<PaginatedResponse<Engagement>> => {
     const { data } = await apiClient.get<ApiResponse<PaginatedResponse<Engagement>>>(
       '/engagements', { params },
     );
     return data.data;
+  },
+
+  /** Fetch every engagement matching the filters by walking all pages. */
+  listAll: async (params?: Omit<EngagementListParams, 'page' | 'limit'>): Promise<Engagement[]> => {
+    const all: Engagement[] = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const { data } = await apiClient.get<ApiResponse<PaginatedResponse<Engagement>>>(
+        '/engagements', { params: { ...params, page, limit: LIST_ALL_PAGE_SIZE } },
+      );
+      const res = data.data;
+      all.push(...res.data);
+      totalPages = res.meta.totalPages;
+      page += 1;
+    } while (page <= totalPages);
+    return all;
   },
 
   get: async (id: string): Promise<Engagement> => {
@@ -105,9 +128,28 @@ export const milestonesApi = {
     metadata: ProofMetadata,
   ): Promise<void> => {
     await apiClient.post(`/engagements/${engagementId}/milestones/${index}/proof-metadata`, metadata);
+  },
+
   /** Store the arbiter's written rationale after resolving a dispute */
   submitResolutionRationale: async (engagementId: string, index: number, rationale: string): Promise<void> => {
     await apiClient.post(`/engagements/${engagementId}/milestones/${index}/resolution-rationale`, { rationale });
+  },
+};
+
+// ----------------------------------------------------------
+// Users (profile & settings)
+// ----------------------------------------------------------
+export const usersApi = {
+  /** GET /users/me — the signed-in user's profile and notification preferences */
+  me: async (): Promise<User> => {
+    const { data } = await apiClient.get<ApiResponse<User>>('/users/me');
+    return data.data;
+  },
+
+  /** PATCH /users/me — update display name, email and notification preferences */
+  updateMe: async (input: UpdateProfileInput): Promise<User> => {
+    const { data } = await apiClient.patch<ApiResponse<User>>('/users/me', input);
+    return data.data;
   },
 };
 

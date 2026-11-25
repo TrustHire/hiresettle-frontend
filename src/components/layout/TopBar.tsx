@@ -2,16 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Bell, LogOut, Menu, RefreshCw, Search, Wifi, X } from 'lucide-react';
+import { AlertTriangle, Bell, FlaskConical, LogOut, Menu, RefreshCw, ShieldCheck, Wifi, X } from 'lucide-react';
 import { useFreighterWatcher } from '@/lib/hooks/use-freighter-watcher';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useMobileSidebar } from './MobileSidebarContext';
 import { openCommandPalette } from './CommandPalette';
 
+const TESTNET_BANNER_DISMISSED_KEY = 'hiresettle_testnet_banner_dismissed';
+
 export function TopBar() {
   const { open, setOpen } = useMobileSidebar();
-  const { unreadCount } = useNotifications();
+  const { unreadCount } = useNotifications({ browserPush: true });
   const {
     networkMismatch,
     accountMismatch,
@@ -22,6 +24,28 @@ export function TopBar() {
   } = useFreighterWatcher();
 
   const { logout, address: authAddress } = useAuthStore();
+
+  const isMainnet = appNetwork === 'mainnet';
+
+  // Testnet warning banner — dismissible, remembered for the browser session.
+  // Starts hidden so server and client renders match, then reads storage.
+  const [testnetBannerDismissed, setTestnetBannerDismissed] = useState(true);
+  useEffect(() => {
+    try {
+      setTestnetBannerDismissed(sessionStorage.getItem(TESTNET_BANNER_DISMISSED_KEY) === 'true');
+    } catch {
+      setTestnetBannerDismissed(false);
+    }
+  }, []);
+
+  const dismissTestnetBanner = () => {
+    setTestnetBannerDismissed(true);
+    try {
+      sessionStorage.setItem(TESTNET_BANNER_DISMISSED_KEY, 'true');
+    } catch {
+      // Storage unavailable — dismissal lasts until reload
+    }
+  };
 
   // Truncate a Stellar address for display: GABCD…WXYZ
   function truncate(addr: string | null) {
@@ -87,6 +111,30 @@ export function TopBar() {
         </div>
       )}
 
+      {/* ── Testnet warning banner ──────────────────────────────────────────
+          Reminds users that balances here are test funds, not real USDC.     */}
+      {!isMainnet && !testnetBannerDismissed && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 w-full bg-amber-50 border-b border-amber-100 text-amber-800 text-sm px-4 py-2"
+        >
+          <span className="flex items-center gap-2">
+            <FlaskConical className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            <span>
+              You&apos;re on the Stellar&nbsp;<strong className="capitalize">{appNetwork}</strong>.
+              Funds here have no real value — do not send real USDC.
+            </span>
+          </span>
+          <button
+            onClick={dismissTestnetBanner}
+            className="p-1 rounded-lg hover:bg-amber-100 transition-colors flex-shrink-0"
+            aria-label="Dismiss testnet warning"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {/* ── Main top bar ────────────────────────────────────────────────── */}
       <header className="h-14 bg-white border-b border-gray-100 flex items-center justify-between px-6 flex-shrink-0">
         <button
@@ -100,44 +148,34 @@ export function TopBar() {
           <Menu className="w-5 h-5" aria-hidden="true" />
         </button>
         <div className="flex items-center gap-3">
-          {/* Command palette trigger — also opens with Cmd/Ctrl+K */}
-          <button
-            type="button"
-            onClick={openCommandPalette}
-            className="inline-flex items-center gap-2 text-xs text-gray-500 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-            aria-label="Search (Ctrl+K)"
-            aria-keyshortcuts="Meta+K Control+K"
-          >
-            <Search className="w-3.5 h-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Search</span>
-            <kbd className="hidden sm:inline text-[10px] font-sans text-gray-400">⌘K</kbd>
-          </button>
-
-          {/* Network badge — turns red with a refresh icon when mismatched */}
+          {/* Network badge (from NEXT_PUBLIC_STELLAR_NETWORK) — green for mainnet,
+              dashed amber for test networks, red with a refresh icon when mismatched */}
           <span
-            className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg ${
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg border ${
               networkMismatch
-                ? 'bg-red-50 text-red-700'
-                : appNetwork === 'mainnet'
-                  ? 'bg-green-50 text-green-700'
-                  : 'bg-amber-50 text-amber-700'
+                ? 'bg-red-50 text-red-700 border-red-100'
+                : isMainnet
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-amber-50 text-amber-700 border-dashed border-amber-300'
             }`}
             title={
               networkMismatch
                 ? `Freighter: ${freighterNetwork ?? ''} — App: ${appNetwork}`
-                : undefined
+                : `Connected to Stellar ${appNetwork}`
             }
           >
             {networkMismatch ? (
               <RefreshCw className="w-3 h-3" aria-hidden="true" />
+            ) : isMainnet ? (
+              <ShieldCheck className="w-3 h-3" aria-hidden="true" />
             ) : (
               <Wifi className="w-3 h-3" aria-hidden="true" />
             )}
-            {networkMismatch
-              ? 'Wrong network'
-              : appNetwork === 'mainnet'
-                ? 'Mainnet'
-                : 'Testnet'}
+            {networkMismatch ? (
+              'Wrong network'
+            ) : (
+              <span className="capitalize">{appNetwork}</span>
+            )}
           </span>
 
           <Link

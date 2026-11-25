@@ -1,0 +1,47 @@
+{
+  "common": {
+    "language": "Idioma"
+  },
+  "sidebar": {
+    "nav": {
+      "overview": "Resumen",
+      "engagements": "Contratos",
+      "disputes": "Disputas",
+      "notifications": "Notificaciones",
+      "events": "Eventos en cadena"
+    },
+    "closeMenu": "Cerrar menú",
+    "notConnected": "No conectado",
+    "stellarTestnet": "Stellar Testnet",
+    "signOut": "Cerrar sesión",
+    "roles": {
+      "COMPANY": "Empresa",
+      "RECRUITER": "Reclutador",
+      "ARBITER": "Árbitro",
+      "ADMIN": "Administrador"
+    }
+  },
+  "login": {
+    "tagline": "Custodia de honorarios de reclutamiento en Stellar",
+    "title": "Iniciar sesión",
+    "intro": "Conecta tu billetera Freighter para acceder a tus contratos. No necesitas contraseña: tu dirección de Stellar es tu identidad.",
+    "freighterMissing": {
+      "title": "Freighter no encontrado",
+      "body": "Instala la extensión de navegador Freighter para conectar tu billetera de Stellar.",
+      "install": "Instalar Freighter →"
+    },
+    "connectionFailed": "La conexión falló. Inténtalo de nuevo.",
+    "steps": {
+      "idle": "Conectar billetera Freighter",
+      "connecting": "Solicitando acceso a la billetera…",
+      "signing": "Firma el mensaje en Freighter…",
+      "verifying": "Verificando con el servidor…",
+      "done": "Redirigiendo…"
+    },
+    "features": {
+      "feeProtection": { "label": "Protección de honorarios", "sub": "Bloqueados en custodia" },
+      "retentionTimers": { "label": "Temporizadores de retención", "sub": "Desbloqueo automático a 30/90 d" },
+      "noTrust": { "label": "Sin necesidad de confianza", "sub": "El contrato hace cumplir las reglas" }
+    }
+  }
+}

@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
   Activity, Search, ChevronLeft, ChevronRight,
-  ExternalLink, AlertTriangle, Loader2, Download,
+  ExternalLink, AlertTriangle, Download,
 } from 'lucide-react';
 import { eventsApi } from '@/lib/api/services';
+import { EventListSkeleton } from '@/components/ui/Skeleton';
 import { timeAgo, shortAddress, downloadChainEventsJson } from '@/lib/utils';
 import type { ChainEvent } from '@/types';
 
@@ -120,15 +121,7 @@ export default function ChainEventsPage() {
           </button>
         </div>
       ) : loading ? (
-        <div className="card divide-y divide-gray-50">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="p-4 flex items-center gap-4 animate-pulse">
-              <div className="h-5 w-32 bg-gray-100 rounded-full" />
-              <div className="h-4 w-28 bg-gray-100 rounded" />
-              <div className="h-4 w-20 bg-gray-100 rounded ml-auto" />
-            </div>
-          ))}
-        </div>
+        <EventListSkeleton count={8} />
       ) : events.length === 0 ? (
         <div className="card p-12 text-center">
           <Activity className="w-10 h-10 text-gray-300 mx-auto mb-3" />

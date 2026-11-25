@@ -16,3 +16,9 @@ export const notificationKeys = {
   all: ["notifications"] as const,
   list: () => [...notificationKeys.all, "list"] as const,
 };
+
+export const accountKeys = {
+  all: ["stellar-account"] as const,
+  setup: (address: string) => [...accountKeys.all, "setup", address] as const,
+  freighter: () => [...accountKeys.all, "freighter"] as const,
+};
