@@ -30,7 +30,8 @@ export function middleware(request: NextRequest) {
 
   const redirectToLogin = () => {
     const loginUrl = new URL('/auth/login', request.url);
-    loginUrl.searchParams.set('callbackUrl', pathname);
+    // Keep the query string so shared deep links survive the login round-trip
+    loginUrl.searchParams.set('callbackUrl', pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   };
 
