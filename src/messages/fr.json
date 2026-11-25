@@ -1,0 +1,47 @@
+{
+  "common": {
+    "language": "Langue"
+  },
+  "sidebar": {
+    "nav": {
+      "overview": "Vue d’ensemble",
+      "engagements": "Missions",
+      "disputes": "Litiges",
+      "notifications": "Notifications",
+      "events": "Événements on-chain"
+    },
+    "closeMenu": "Fermer le menu",
+    "notConnected": "Non connecté",
+    "stellarTestnet": "Stellar Testnet",
+    "signOut": "Se déconnecter",
+    "roles": {
+      "COMPANY": "Entreprise",
+      "RECRUITER": "Recruteur",
+      "ARBITER": "Arbitre",
+      "ADMIN": "Administrateur"
+    }
+  },
+  "login": {
+    "tagline": "Séquestre des honoraires de recrutement sur Stellar",
+    "title": "Se connecter",
+    "intro": "Connectez votre portefeuille Freighter pour accéder à vos missions. Aucun mot de passe requis — votre adresse Stellar est votre identité.",
+    "freighterMissing": {
+      "title": "Freighter introuvable",
+      "body": "Installez l’extension de navigateur Freighter pour connecter votre portefeuille Stellar.",
+      "install": "Installer Freighter →"
+    },
+    "connectionFailed": "La connexion a échoué. Veuillez réessayer.",
+    "steps": {
+      "idle": "Connecter le portefeuille Freighter",
+      "connecting": "Demande d’accès au portefeuille…",
+      "signing": "Signez le message dans Freighter…",
+      "verifying": "Vérification auprès du serveur…",
+      "done": "Redirection…"
+    },
+    "features": {
+      "feeProtection": { "label": "Honoraires protégés", "sub": "Bloqués sous séquestre" },
+      "retentionTimers": { "label": "Minuteurs de rétention", "sub": "Déblocage auto à 30/90 j" },
+      "noTrust": { "label": "Aucune confiance requise", "sub": "Le contrat applique les règles" }
+    }
+  }
+}

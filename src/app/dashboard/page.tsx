@@ -16,6 +16,12 @@ import { useQuery } from "@tanstack/react-query";
 import { engagementsApi } from "@/lib/api/services";
 import { useAuthStore } from "@/lib/hooks/use-auth-store";
 import { engagementKeys } from "@/lib/query-keys";
+import { useAccountSetup } from "@/lib/hooks/use-account-setup";
+import {
+  OnboardingChecklist,
+  useOnboardingDismissed,
+} from "@/components/onboarding/OnboardingChecklist";
+import { TestnetSetupCard } from "@/components/onboarding/TestnetHelpers";
 import { stroopsToUsdc, formatDate, cn } from "@/lib/utils";
 import type { Engagement, Milestone, UserRole } from "@/types";
 
@@ -196,6 +202,9 @@ export default function DashboardOverviewPage() {
     },
   });
   const engagements = overviewQuery.data ?? EMPTY_ENGAGEMENTS;
+  const accountSetup = useAccountSetup(address);
+  const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } =
+    useOnboardingDismissed(address);
   const loading = !isHydrated || (!!address && overviewQuery.isLoading);
   const error = overviewQuery.isError
     ? overviewQuery.error.message || "Failed to load data."
@@ -308,6 +317,19 @@ export default function DashboardOverviewPage() {
             : `Summary across ${engagements.length} engagement${engagements.length === 1 ? "" : "s"}.`}
         </p>
       </div>
+
+      {/* ── First-run onboarding (users with no engagements) ── */}
+      {engagements.length === 0 && onboardingDismissed !== true ? (
+        // `null` = dismissal state not read yet; render nothing to avoid a flash
+        onboardingDismissed === false && (
+          <OnboardingChecklist
+            setup={accountSetup}
+            onDismiss={dismissOnboarding}
+          />
+        )
+      ) : (
+        <TestnetSetupCard setup={accountSetup} />
+      )}
 
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

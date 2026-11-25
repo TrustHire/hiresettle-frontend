@@ -1,7 +1,9 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, type Locale as DateFnsLocale } from 'date-fns';
+import { enUS, es, fr } from 'date-fns/locale';
 import type { MilestoneStatus, EngagementStatus, ChainEvent } from '@/types';
+import { DEFAULT_LOCALE, type Locale } from '../i18n/config';
 
 export const LEDGERS_PER_DAY = Number(process.env.NEXT_PUBLIC_LEDGERS_PER_DAY) || 17280;
 
@@ -63,14 +65,29 @@ export function usdcToStroops(usdc: string): bigint {
   return BigInt(whole) * 10_000_000n + BigInt(padded);
 }
 
-export function formatDate(date: string | null): string {
-  if (!date) return '—';
-  return format(new Date(date), 'MMM d, yyyy');
+// ── Locale-aware date formatting ──────────────────────────────────────────────
+
+const DATE_FNS_LOCALES: Record<Locale, DateFnsLocale> = { en: enUS, es, fr };
+
+/** Active UI locale for date formatting; kept in sync by `I18nProvider`. */
+let activeDateLocale: Locale = DEFAULT_LOCALE;
+
+export function setDateLocale(locale: Locale) {
+  activeDateLocale = locale;
 }
 
-export function timeAgo(date: string | null): string {
+/** Format a date as a localised medium date, e.g. "Nov 24, 2026" / "24 nov 2026". */
+export function formatDate(date: string | null, locale: Locale = activeDateLocale): string {
   if (!date) return '—';
-  return formatDistanceToNow(new Date(date), { addSuffix: true });
+  return format(new Date(date), 'PP', { locale: DATE_FNS_LOCALES[locale] });
+}
+
+export function timeAgo(date: string | null, locale: Locale = activeDateLocale): string {
+  if (!date) return '—';
+  return formatDistanceToNow(new Date(date), {
+    addSuffix: true,
+    locale: DATE_FNS_LOCALES[locale],
+  });
 }
 
 // ── Block explorer helpers ─────────────────────────────────────────────────────

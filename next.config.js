@@ -22,12 +22,17 @@ const horizonUrl = process.env.NEXT_PUBLIC_HORIZON_URL
   ? getOrigin(process.env.NEXT_PUBLIC_HORIZON_URL, 'https://horizon-testnet.stellar.org')
   : 'https://horizon-testnet.stellar.org';
 
+// Friendbot is only reachable (and only used) on testnet
+const friendbotUrl = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
+  ? ''
+  : getOrigin(process.env.NEXT_PUBLIC_FRIENDBOT_URL || 'https://friendbot.stellar.org', 'https://friendbot.stellar.org');
+
 const ipfsGateway = process.env.NEXT_PUBLIC_IPFS_GATEWAY
   ? getOrigin(process.env.NEXT_PUBLIC_IPFS_GATEWAY, 'https://ipfs.io')
   : 'https://ipfs.io';
 
 const connectSources = Array.from(
-  new Set(["'self'", apiUrl, rpcUrl, horizonUrl, ipfsGateway].filter(Boolean)),
+  new Set(["'self'", apiUrl, rpcUrl, horizonUrl, friendbotUrl, ipfsGateway].filter(Boolean)),
 ).join(' ');
 
 const cspHeader = [
