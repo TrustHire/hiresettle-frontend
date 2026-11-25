@@ -4,6 +4,7 @@ import { Bell, CheckCheck, Loader2, Clock } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notificationsApi } from "@/lib/api/services";
+import { PushNotificationToggle } from "@/components/notifications/PushNotificationToggle";
 import { notificationKeys } from "@/lib/query-keys";
 import { timeAgo } from "@/lib/utils";
 import { toReadableError } from "@/lib/utils/toast-error";
@@ -77,6 +78,8 @@ export default function NotificationsPage() {
           </button>
         )}
       </div>
+
+      <PushNotificationToggle />
 
       {loading ? (
         <div className="flex justify-center py-16">

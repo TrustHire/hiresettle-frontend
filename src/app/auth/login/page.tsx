@@ -4,14 +4,22 @@ import { useState, useEffect } from 'react';
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, Wallet, ShieldCheck, Clock, DollarSign } from 'lucide-react';
-import { connectFreighter, isFreighterInstalled, signNonce } from '@/lib/stellar/freighter';
-import { authApi } from '@/lib/api/services';
+import { isFreighterInstalled } from '@/lib/stellar/freighter';
+import { signInWithFreighter } from '@/lib/stellar/freighter-auth';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
-import { Networks } from '@stellar/stellar-sdk';
-import { useTranslations } from '@/lib/i18n';
-import { LanguageSwitcher } from '@/components/layout/LanguageSwitcher';
 
 type Step = 'idle' | 'connecting' | 'signing' | 'verifying' | 'done';
+
+const DEFAULT_CALLBACK = '/dashboard/engagements';
+
+/** Only allow same-origin relative paths so the callback can't redirect off-site. */
+function safeCallbackUrl(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+    return DEFAULT_CALLBACK;
+  }
+  if (raw.startsWith('/auth')) return DEFAULT_CALLBACK;
+  return raw;
+}
 
 export default function LoginPage() {
   return (
@@ -24,8 +32,7 @@ export default function LoginPage() {
 function LoginContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const t = useTranslations();
-  const callbackUrl = params.get('callbackUrl') ?? '/dashboard/engagements';
+  const callbackUrl = safeCallbackUrl(params.get('callbackUrl'));
 
   const { setAuth, isConnected } = useAuthStore();
   const [step, setStep] = useState<Step>('idle');
@@ -38,24 +45,7 @@ function LoginContent() {
   const handleConnect = async () => {
     setError(null);
     try {
-      setStep('connecting');
-      const address = await connectFreighter();
-
-      const nonce = await authApi.getNonce(address);
-
-      setStep('signing');
-      const networkPassphrase = process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'mainnet'
-        ? Networks.PUBLIC
-        : Networks.TESTNET;
-
-      const signedNonce = await signNonce(nonce, networkPassphrase);
-
-      setStep('verifying');
-      const { accessToken, user } = await authApi.login({
-        stellarAddress: address,
-        signedNonce,
-        signature: signedNonce,
-      });
+      const { address, accessToken, user } = await signInWithFreighter(setStep);
 
       setAuth(address, accessToken, user);
       setStep('done');
