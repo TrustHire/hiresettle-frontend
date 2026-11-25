@@ -12,8 +12,6 @@ import {
   ChevronRight,
   Loader2,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { engagementsApi } from "@/lib/api/services";
 import { useAuthStore } from "@/lib/hooks/use-auth-store";
 import { engagementKeys } from "@/lib/query-keys";
 import { useAccountSetup } from "@/lib/hooks/use-account-setup";
@@ -147,60 +145,7 @@ function EmptyState({ message }: { message: string }) {
 
 export default function DashboardOverviewPage() {
   const { address, user, isHydrated } = useAuthStore();
-  const overviewQuery = useQuery({
-    queryKey: [...engagementKeys.all, "overview", address, user?.role],
-    enabled: isHydrated && !!address,
-    queryFn: async () => {
-      if (!address) {
-        throw new Error(
-          "A wallet address is required to load dashboard engagements.",
-        );
-      }
-
-      // Fetch all engagements where the user is a participant. For roles that
-      // appear as multiple parties we fire parallel requests and deduplicate.
-      const queries: Promise<Engagement[]>[] = [];
-
-      if (!user?.role || user.role === "COMPANY") {
-        queries.push(
-          engagementsApi
-            .list({ companyAddress: address, limit: 200 })
-            .then((r) => r.data),
-        );
-      }
-      if (!user?.role || user.role === "RECRUITER") {
-        queries.push(
-          engagementsApi
-            .list({ recruiterAddress: address, limit: 200 })
-            .then((r) => r.data),
-        );
-      }
-      if (user?.role === "ARBITER" || user?.role === "ADMIN") {
-        // Arbiter address isn't a filter the API exposes, so fetch all active
-        // engagements and filter client-side.
-        queries.push(
-          engagementsApi
-            .list({ limit: 200 })
-            .then((r) =>
-              r.data.filter(
-                (engagement) => engagement.arbiterAddress === address,
-              ),
-            ),
-        );
-      }
-      if (queries.length === 0) {
-        // Fallback: fetch all
-        queries.push(engagementsApi.list({ limit: 200 }).then((r) => r.data));
-      }
-
-      const results = await Promise.all(queries);
-      const map = new Map<string, Engagement>();
-      results
-        .flat()
-        .forEach((engagement) => map.set(engagement.id, engagement));
-      return [...map.values()];
-    },
-  });
+  const overviewQuery = useParticipantEngagements();
   const engagements = overviewQuery.data ?? EMPTY_ENGAGEMENTS;
   const accountSetup = useAccountSetup(address);
   const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } =
@@ -365,6 +310,9 @@ export default function DashboardOverviewPage() {
           }
         />
       </div>
+
+      {/* ── Escrow over time ── */}
+      <EscrowChart engagements={engagements} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ── Action required ── */}

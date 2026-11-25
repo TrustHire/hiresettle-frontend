@@ -2,6 +2,7 @@
 
 import { ExternalLink } from 'lucide-react';
 import { CopyButton } from '@/components/ui/CopyButton';
+import { AddressAvatar } from '@/components/ui/AddressAvatar';
 import {
   shortAddress,
   formatDate,
@@ -16,6 +17,7 @@ import type { Engagement } from '@/types';
 function AddressCell({ value }: { value: string }) {
   return (
     <div className="flex items-center gap-1.5 min-w-0">
+      <AddressAvatar address={value} size={16} />
       <span className="font-mono text-gray-700 truncate">{shortAddress(value, 6)}</span>
       <CopyButton value={value} />
       <a

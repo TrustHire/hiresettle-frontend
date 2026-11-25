@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { ArrowRight, MapPin, DollarSign } from 'lucide-react';
 import {
   engagementStatusBadge, engagementStatusLabel,
-  stroopsToUsdc, timeAgo, engagementProgress,
+  stroopsToUsdc, timeAgo, engagementProgress, shortAddress,
 } from '@/lib/utils';
+import { AddressAvatar } from '@/components/ui/AddressAvatar';
 import type { Engagement } from '@/types';
 
 export function EngagementCard({ engagement: e }: { engagement: Engagement }) {
@@ -36,6 +37,18 @@ export function EngagementCard({ engagement: e }: { engagement: Engagement }) {
                 </span>
               )}
               <span>{timeAgo(e.createdAt)}</span>
+              {/* Parties — identicons make each address recognisable */}
+              <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1" title={`Company: ${e.companyAddress}`}>
+                  <AddressAvatar address={e.companyAddress} size={14} />
+                  <span className="font-mono">{shortAddress(e.companyAddress, 3)}</span>
+                </span>
+                <ArrowRight className="w-3 h-3 text-gray-300 flex-shrink-0" aria-hidden="true" />
+                <span className="flex items-center gap-1" title={`Recruiter: ${e.recruiterAddress}`}>
+                  <AddressAvatar address={e.recruiterAddress} size={14} />
+                  <span className="font-mono">{shortAddress(e.recruiterAddress, 3)}</span>
+                </span>
+              </span>
             </div>
           </div>
 

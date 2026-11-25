@@ -866,7 +866,7 @@ interface CalendarMenuProps {
   engagementId: string;
 }
 
-function CalendarMenu({
+export function CalendarMenu({
   unlockDate,
   title,
   description,

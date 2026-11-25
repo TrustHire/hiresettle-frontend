@@ -7,6 +7,7 @@ import { useFreighterWatcher } from '@/lib/hooks/use-freighter-watcher';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { useNotifications } from '@/lib/hooks/use-notifications';
 import { useMobileSidebar } from './MobileSidebarContext';
+import { openCommandPalette } from './CommandPalette';
 
 const TESTNET_BANNER_DISMISSED_KEY = 'hiresettle_testnet_banner_dismissed';
 
