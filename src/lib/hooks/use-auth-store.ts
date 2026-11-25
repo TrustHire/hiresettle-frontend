@@ -57,6 +57,7 @@ interface AuthState {
 
   setAuth: (address: string, token: string, user: User) => void;
   setAddress: (address: string) => void;
+  setUser: (user: User) => void;
   logout: () => void;
   rehydrate: () => void;
 }
@@ -82,6 +83,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   setAddress: (address) => set({ address, isConnected: true }),
+
+  setUser: (user) => set({ user }),
 
   logout: () => {
     if (typeof window !== 'undefined') {

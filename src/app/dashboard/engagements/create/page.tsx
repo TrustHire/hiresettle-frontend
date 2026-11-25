@@ -12,6 +12,8 @@ import { useAuthStore } from '@/lib/hooks/use-auth-store';
 import { engagementKeys } from '@/lib/query-keys';
 import { generateEngagementId, LEDGERS_PER_DAY, usdcToStroops } from '@/lib/utils';
 import { useEngagementDraft } from '@/lib/hooks/use-engagement-draft';
+import { useOnline } from '@/lib/hooks/use-online';
+import { useFederatedAddress, type FederatedAddressState } from '@/lib/hooks/use-federated-address';
 import type { MilestoneInput } from '@/types';
 
 const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS!;
@@ -63,6 +65,7 @@ export default function CreateEngagementPage() {
   const cloneFromId = searchParams.get('cloneFrom');
   const { address } = useAuthStore();
   const online = useOnline();
+  const queryClient = useQueryClient();
 
   const [engagementId]   = useState(generateEngagementId);
   const [recruiterAddress, setRecruiterAddress] = useState('');
@@ -187,23 +190,37 @@ export default function CreateEngagementPage() {
 
   // ── Derived validation ───────────────────────────────────────────────────────
 
+  // Federation addresses (name*domain.com) are resolved to G… keys; raw keys pass through.
+  const recruiterFederation = useFederatedAddress(recruiterAddress);
+  const arbiterFederation   = useFederatedAddress(arbiterAddress);
+
+  /** The G… address used for validation and submission. */
+  const resolvedRecruiter = recruiterFederation.isFederated
+    ? recruiterFederation.resolved ?? ''
+    : recruiterAddress.trim();
+  const resolvedArbiter = arbiterFederation.isFederated
+    ? arbiterFederation.resolved ?? ''
+    : arbiterAddress.trim();
+
   const recruiterError = useMemo<string | null>(() => {
     if (recruiterAddress.trim() === '') return null; // empty = pristine, no error yet
-    if (!isValidStellarAddress(recruiterAddress)) return 'Not a valid Stellar public key (G…).';
+    if (recruiterFederation.isFederated) return recruiterFederation.error;
+    if (!isValidStellarAddress(recruiterAddress)) return 'Not a valid Stellar public key (G…) or federation address (name*domain.com).';
     return null;
-  }, [recruiterAddress]);
+  }, [recruiterAddress, recruiterFederation.isFederated, recruiterFederation.error]);
 
   const arbiterError = useMemo<string | null>(() => {
     if (arbiterAddress.trim() === '') return null;
-    if (!isValidStellarAddress(arbiterAddress)) return 'Not a valid Stellar public key (G…).';
+    if (arbiterFederation.isFederated) return arbiterFederation.error;
+    if (!isValidStellarAddress(arbiterAddress)) return 'Not a valid Stellar public key (G…) or federation address (name*domain.com).';
     return null;
-  }, [arbiterAddress]);
+  }, [arbiterAddress, arbiterFederation.isFederated, arbiterFederation.error]);
 
   /** Uniqueness errors — only shown when the individual field is otherwise valid. */
   const uniquenessErrors = useMemo<{ recruiter?: string; arbiter?: string }>(() => {
     const errors: { recruiter?: string; arbiter?: string } = {};
-    const r = recruiterAddress.trim();
-    const ar = arbiterAddress.trim();
+    const r = resolvedRecruiter;
+    const ar = resolvedArbiter;
     const co = address?.trim() ?? '';
 
     if (r && isValidStellarAddress(r)) {
@@ -214,7 +231,7 @@ export default function CreateEngagementPage() {
       if (co && ar === co) errors.arbiter = 'Arbiter address must differ from your company address.';
     }
     return errors;
-  }, [recruiterAddress, arbiterAddress, address]);
+  }, [resolvedRecruiter, resolvedArbiter, address]);
 
   const amountErr = useMemo<string | null>(() => {
     if (totalUsdc.trim() === '') return null; // pristine
@@ -244,15 +261,15 @@ export default function CreateEngagementPage() {
   /** True only when every required field passes all rules. */
   const formIsValid = useMemo<boolean>(() => {
     if (!jobTitle.trim()) return false;
-    if (!recruiterAddress.trim() || !isValidStellarAddress(recruiterAddress)) return false;
-    if (!arbiterAddress.trim() || !isValidStellarAddress(arbiterAddress)) return false;
+    if (!resolvedRecruiter || !isValidStellarAddress(resolvedRecruiter)) return false;
+    if (!resolvedArbiter || !isValidStellarAddress(resolvedArbiter)) return false;
     if (Object.keys(uniquenessErrors).length > 0) return false;
     if (amountError(totalUsdc) !== null) return false;
     if (!percentValid) return false;
     if (Object.keys(milestoneRetentionErrors).length > 0) return false;
     return true;
   }, [
-    jobTitle, recruiterAddress, arbiterAddress, uniquenessErrors,
+    jobTitle, resolvedRecruiter, resolvedArbiter, uniquenessErrors,
     totalUsdc, percentValid, milestoneRetentionErrors,
   ]);
 
@@ -302,8 +319,8 @@ export default function CreateEngagementPage() {
       const txHash = await createEngagement({
         callerAddress: address,
         engagementId,
-        recruiter: recruiterAddress,
-        arbiter: arbiterAddress,
+        recruiter: resolvedRecruiter,
+        arbiter: resolvedArbiter,
         tokenAddress: USDC_ADDRESS,
         totalAmount: usdcToStroops(totalUsdc),
         jobTitle,
@@ -316,8 +333,8 @@ export default function CreateEngagementPage() {
       await engagementsApi.create({
         engagementId,
         companyAddress: address,
-        recruiterAddress,
-        arbiterAddress,
+        recruiterAddress: resolvedRecruiter,
+        arbiterAddress: resolvedArbiter,
         tokenAddress: USDC_ADDRESS,
         totalAmount: usdcToStroops(totalUsdc).toString(),
         jobTitle,
@@ -422,8 +439,8 @@ export default function CreateEngagementPage() {
             </div>
             <dl className="space-y-2.5">
               <ReviewRow label="Company (you)" value={<span className="font-mono text-xs break-all">{address}</span>} />
-              <ReviewRow label="Recruiter"     value={<span className="font-mono text-xs break-all">{recruiterAddress}</span>} />
-              <ReviewRow label="Arbiter"       value={<span className="font-mono text-xs break-all">{arbiterAddress}</span>} />
+              <ReviewRow label="Recruiter"     value={<ReviewAddress input={recruiterAddress} resolved={resolvedRecruiter} />} />
+              <ReviewRow label="Arbiter"       value={<ReviewAddress input={arbiterAddress} resolved={resolvedArbiter} />} />
             </dl>
           </div>
 
@@ -652,7 +669,7 @@ export default function CreateEngagementPage() {
             <div>
               <label className="label">Recruiter Stellar address <span className="text-red-500">*</span></label>
               <input
-                placeholder="G..."
+                placeholder="G... or name*domain.com"
                 value={recruiterAddress}
                 onChange={(e) => { setRecruiterAddress(e.target.value); autosave({ recruiterAddress: e.target.value }); }}
                 aria-invalid={!!(recruiterError || uniquenessErrors.recruiter)}
@@ -660,6 +677,7 @@ export default function CreateEngagementPage() {
                   (recruiterError || uniquenessErrors.recruiter) ? 'border-red-400 focus:ring-red-300' : ''
                 }`}
               />
+              <FederationStatus state={recruiterFederation} />
               {recruiterError    && <FieldError message={recruiterError} />}
               {!recruiterError && uniquenessErrors.recruiter && <FieldError message={uniquenessErrors.recruiter} />}
             </div>
@@ -667,7 +685,7 @@ export default function CreateEngagementPage() {
             <div>
               <label className="label">Arbiter Stellar address <span className="text-red-500">*</span></label>
               <input
-                placeholder="G..."
+                placeholder="G... or name*domain.com"
                 value={arbiterAddress}
                 onChange={(e) => { setArbiterAddress(e.target.value); autosave({ arbiterAddress: e.target.value }); }}
                 aria-invalid={!!(arbiterError || uniquenessErrors.arbiter)}
@@ -675,6 +693,7 @@ export default function CreateEngagementPage() {
                   (arbiterError || uniquenessErrors.arbiter) ? 'border-red-400 focus:ring-red-300' : ''
                 }`}
               />
+              <FederationStatus state={arbiterFederation} />
               {arbiterError    && <FieldError message={arbiterError} />}
               {!arbiterError && uniquenessErrors.arbiter && <FieldError message={uniquenessErrors.arbiter} />}
               <p className="text-xs text-gray-400 mt-1">Resolves disputes between company and recruiter.</p>
@@ -809,6 +828,41 @@ export default function CreateEngagementPage() {
 }
 
 // ── Small helper components ────────────────────────────────────────────────────
+
+/** Shows the federation lookup progress / resolved G… address under an address input. */
+function FederationStatus({ state }: { state: FederatedAddressState }) {
+  if (!state.isFederated) return null;
+  if (state.resolving) {
+    return (
+      <p className="mt-1 flex items-center gap-1 text-xs text-gray-400">
+        <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+        Resolving federation address…
+      </p>
+    );
+  }
+  if (!state.resolved) return null;
+  return (
+    <p className="mt-1 flex items-start gap-1 text-xs text-green-700">
+      <ShieldCheck className="w-3 h-3 mt-0.5 flex-shrink-0" />
+      <span>
+        Resolves to <span className="font-mono break-all">{state.resolved}</span>
+      </span>
+    </p>
+  );
+}
+
+/** Review-step address: shows the federation name alongside the resolved key. */
+function ReviewAddress({ input, resolved }: { input: string; resolved: string }) {
+  const typed = input.trim();
+  return (
+    <span className="font-mono text-xs break-all">
+      {resolved}
+      {typed !== resolved && (
+        <span className="block font-sans text-gray-400">{typed}</span>
+      )}
+    </span>
+  );
+}
 
 function FieldError({ message }: { message: string }) {
   return (

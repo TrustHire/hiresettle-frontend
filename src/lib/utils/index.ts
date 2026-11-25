@@ -44,6 +44,19 @@ export function stroopsToUsdc(stroops: string | bigint, decimals = 2): string {
   return parseFloat(`${whole}.${fraction}`).toFixed(decimals);
 }
 
+/**
+ * Convert stroops to an exact decimal USDC string (all 7 decimal places).
+ * Uses BigInt arithmetic only, so large amounts never lose precision.
+ */
+export function stroopsToExactUsdc(stroops: string | bigint): string {
+  const v = BigInt(stroops);
+  const negative = v < 0n;
+  const abs = negative ? -v : v;
+  const whole = abs / 10_000_000n;
+  const fraction = (abs % 10_000_000n).toString().padStart(7, '0');
+  return `${negative ? '-' : ''}${whole}.${fraction}`;
+}
+
 /** Convert human-readable USDC to stroops bigint */
 export function usdcToStroops(usdc: string): bigint {
   if (usdc.length === 0) {
@@ -105,6 +118,61 @@ export function explorerTxUrl(txHash: string): string {
 /** Link to an account on stellar.expert */
 export function explorerAccountUrl(address: string): string {
   return `https://stellar.expert/explorer/${explorerNetwork()}/account/${address}`;
+}
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+
+/** Escape a single CSV cell (RFC 4180) and neutralise spreadsheet formula injection. */
+export function csvEscape(value: string | number | null | undefined): string {
+  let s = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Build a CSV document from a header row and data rows. */
+export function toCsv(header: string[], rows: (string | number | null | undefined)[][]): string {
+  return [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n');
+}
+
+/** Serialise engagements to CSV with exact (stroop-precise) USDC amounts. */
+export function engagementsToCsv(engagements: Engagement[]): string {
+  const header = [
+    'ID',
+    'Job title',
+    'Company',
+    'Recruiter',
+    'Arbiter',
+    'Total (USDC)',
+    'Released (USDC)',
+    'Status',
+    'Created at',
+  ];
+  const rows = engagements.map((e) => [
+    e.id,
+    e.jobTitle,
+    e.companyAddress,
+    e.recruiterAddress,
+    e.arbiterAddress,
+    stroopsToExactUsdc(e.totalAmount),
+    stroopsToExactUsdc(e.releasedAmount),
+    engagementStatusLabel(e.status),
+    e.createdAt,
+  ]);
+  return toCsv(header, rows);
+}
+
+/** Trigger a browser download of CSV content. */
+export function downloadCsv(fileName: string, csv: string): void {
+  // Prefix a BOM so Excel detects UTF-8 correctly
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 // ── Engagement ID ─────────────────────────────────────────────────────────────

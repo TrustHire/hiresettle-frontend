@@ -3,8 +3,9 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Briefcase, Bell, Activity, LogOut, Scale, ShieldCheck, X } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Bell, Activity, LogOut, Scale, ShieldCheck, X, Settings, Wallet } from 'lucide-react';
 import { useAuthStore } from '@/lib/hooks/use-auth-store';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { shortAddress, cn } from '@/lib/utils';
 import { useTranslations } from '@/lib/i18n';
 import { useMobileSidebar } from './MobileSidebarContext';
@@ -23,7 +24,8 @@ const ROLES = ['COMPANY', 'RECRUITER', 'ARBITER', 'ADMIN'];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { address, user, logout } = useAuthStore();
+  const { address, logout } = useAuthStore();
+  const { user } = useCurrentUser();
   const { open, setOpen } = useMobileSidebar();
   const t = useTranslations();
 
@@ -45,6 +47,8 @@ export function Sidebar() {
   const roleLabel = user?.role
     ? ROLES.includes(user.role) ? t(`sidebar.roles.${user.role}`) : user.role
     : null;
+
+  const displayName = user?.name?.trim() || null;
 
   const sidebarContent = (
     <>
@@ -97,7 +101,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gray-50 mb-2">
           <div className="w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-semibold text-brand-700">
-              {address?.slice(0, 2) ?? 'G'}
+              {displayName ? displayName.slice(0, 2).toUpperCase() : address?.slice(0, 2) ?? 'G'}
             </span>
           </div>
           <div className="min-w-0">

@@ -99,12 +99,31 @@ export interface Notification {
   createdAt: string;
 }
 
+/** Which events the user wants email alerts for. */
+export interface NotificationPreferences {
+  /** Master switch for all email alerts. */
+  emailEnabled: boolean;
+  /** Retention milestone has unlocked and can be claimed. */
+  retentionUnlocks: boolean;
+  /** A milestone payment has been released. */
+  paymentReleased: boolean;
+  /** A dispute was raised or resolved on one of the user's engagements. */
+  disputes: boolean;
+}
+
 export interface User {
   id: string;
   stellarAddress: string;
   email: string | null;
   name: string | null;
   role: UserRole;
+  notificationPreferences?: NotificationPreferences | null;
+}
+
+export interface UpdateProfileInput {
+  name: string | null;
+  email: string | null;
+  notificationPreferences: NotificationPreferences;
 }
 
 export interface MilestoneInput {
